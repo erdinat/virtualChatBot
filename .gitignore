@@ -1,0 +1,44 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ===== Sanal Ortam =====
+venv/
+.venv/
+env/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== Ortam Değişkenleri =====
+.env
+
+# ===== Veri Dosyaları =====
+data/vector_store/
+data/raw_pdfs/*.pdf
+
+# ===== Modeller =====
+models/*.pt
+models/*.pth
+*.ckpt
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+notebooks/*.ipynb
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Streamlit =====
+.streamlit/secrets.toml
