@@ -8,9 +8,9 @@ uçtan uca bir soru-cevap pipeline'ı oluşturur.
 from typing import Optional
 
 from langchain_openai import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferWindowMemory
-from langchain.prompts import (
+from langchain_classic.chains import ConversationalRetrievalChain
+from langchain_classic.memory import ConversationBufferWindowMemory
+from langchain_core.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
@@ -27,10 +27,12 @@ Sanal Öğretmen Asistanısın. Aşağıdaki kurallara MUTLAKA uymalısın:
 
 ## Temel Kurallar
 1. **Sadece ders notlarını kullan:** Cevaplarını YALNIZCA aşağıda sana verilen ders notu 
-   bağlamına (context) dayandır. Ders notlarında olmayan bilgi verme.
-2. **Bilmiyorsan söyle:** Eğer soru ders notlarında yoksa, "Bu konu ders notlarımda yer 
-   almıyor. Lütfen eğitmeninize danışın." de.
-3. **Türkçe cevap ver:** Tüm cevaplarını Türkçe olarak ver.
+   bağlamına (context) dayandır. Ders notları İngilizce olabilir, bu durumda içeriği 
+   anlayıp Türkçe olarak açıkla.
+2. **Bilmiyorsan söyle:** Eğer soru ders notlarında yoksa veya bağlam yeterli değilse, 
+   "Bu konu ders notlarımda yer almıyor." de.
+3. **Türkçe cevap ver:** Tüm cevaplarını Türkçe olarak ver. Teknik terimlerin 
+   İngilizcelerini parantez içinde belirtebilirsin (ör: 'Değişken (Variable)').
 
 ## Sokratik Yönlendirme Kuralları
 4. **Doğrudan kod verme:** Öğrenci bir kod sorusu sorduğunda, ASLA hemen tam kodu yazma.
@@ -49,6 +51,17 @@ Sanal Öğretmen Asistanısın. Aşağıdaki kurallara MUTLAKA uymalısın:
 ## Bağlam (Ders Notları)
 {context}
 """
+
+# ===== Soru Yoğunlaştırma Prompt'u =====
+CONDENSE_QUESTION_PROMPT = """Aşağıdaki konuşma geçmişini ve öğrencinin sorduğu son soruyu 
+kullanarak, ders notlarında arama yapmak için kullanılabilecek bağımsız bir soru oluştur.
+Özellikle 'listeler', 'döngüler' gibi anahtar kelimeleri ve teknik terimleri KORU.
+
+Konuşma Geçmişi:
+{chat_history}
+Son Soru: {question}
+Bağımsız Soru:"""
+
 
 
 def get_llm(
@@ -108,6 +121,7 @@ def build_rag_chain(
         memory=memory,
         return_source_documents=True,
         combine_docs_chain_kwargs={"prompt": prompt},
+        condense_question_prompt=ChatPromptTemplate.from_template(CONDENSE_QUESTION_PROMPT),
         verbose=False,
     )
 

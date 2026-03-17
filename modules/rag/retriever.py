@@ -7,7 +7,7 @@ Top-K + Kosinüs Benzerliği tabanlı semantik arama.
 
 from typing import List, Optional
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
 
 from config.settings import RAGConfig
@@ -18,7 +18,7 @@ def get_retriever(vector_store: Chroma, top_k: int = None):
     ChromaDB üzerinden LangChain retriever nesnesi döndürür.
     Cosine similarity ile en alakalı K dokümanı getirir.
     """
-    k = top_k or RAGConfig.TOP_K
+    k = top_k or 6  # Daha derin arama için varsayılan 4'ten 6'ya çıkarıldı
 
     retriever = vector_store.as_retriever(
         search_type="similarity",
