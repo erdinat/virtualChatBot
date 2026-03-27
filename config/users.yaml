@@ -1,0 +1,19 @@
+credentials:
+  usernames:
+    ali:
+      name: Ali Yılmaz
+      password: "$2b$12$ZiJLgYAYjN1mwYEofETxXurAHwqKv1HnUdOPNjUw4VF/xUmPtz2eW"
+      role: student
+    ayse:
+      name: Ayşe Kaya
+      password: "$2b$12$zaCoW4H0SSainrIOFCuGKO38cicVh.YgAyBJxdnNrm2B7aUsQIKcS"
+      role: student
+    ogretmen:
+      name: Prof. Mehmet Öz
+      password: "$2b$12$Fl2RhJ.5Q3UdmcS4SFKcGurvuUpIYq0L8U.kTy5HwmnvqQXC6HnA2"
+      role: teacher
+
+cookie:
+  name: sta_auth_cookie
+  key: gizli_imza_anahtari_2024_sta
+  expiry_days: 1

@@ -42,3 +42,10 @@ Thumbs.db
 
 # ===== Streamlit =====
 .streamlit/secrets.toml
+
+# ===== Kullanıcı Verileri =====
+data/student_logs/
+data/system_logs/
+
+# ===== Araç Konfigürasyonu =====
+CLAUDE.md

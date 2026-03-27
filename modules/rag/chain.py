@@ -16,48 +16,79 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
 )
 
-from config.settings import LLMConfig, RAGConfig
-from modules.rag.embeddings import get_embedding_model, load_vector_store
+from config.settings import LLMConfig
+from modules.rag.embeddings import load_vector_store
 from modules.rag.retriever import get_retriever
 
 
-# ===== Sistem Prompt'u (Sokratik Yönlendirme Dahil) =====
-SYSTEM_PROMPT = """Sen, bir üniversitede Python Programlama dersi veren deneyimli bir 
+# ===== Sistem Prompt'u =====
+SYSTEM_PROMPT = """Sen, bir üniversitede Python Programlama dersi veren deneyimli bir
 Sanal Öğretmen Asistanısın. Aşağıdaki kurallara MUTLAKA uymalısın:
 
 ## Temel Kurallar
-1. **Sadece ders notlarını kullan:** Cevaplarını YALNIZCA aşağıda sana verilen ders notu 
-   bağlamına (context) dayandır. Ders notları İngilizce olabilir, bu durumda içeriği 
+1. **Sadece ders notlarını kullan:** Cevaplarını YALNIZCA aşağıda sana verilen ders notu
+   bağlamına (context) dayandır. Ders notları İngilizce olabilir, bu durumda içeriği
    anlayıp Türkçe olarak açıkla.
-2. **Bilmiyorsan söyle:** Eğer soru ders notlarında yoksa veya bağlam yeterli değilse, 
-   "Bu konu ders notlarımda yer almıyor." de.
-3. **Türkçe cevap ver:** Tüm cevaplarını Türkçe olarak ver. Teknik terimlerin 
-   İngilizcelerini parantez içinde belirtebilirsin (ör: 'Değişken (Variable)').
+2. **Bağlamı akıllıca kullan:** Sana sağlanan bağlam (context) öğrencinin sorusuyla
+   DOĞRUDAN ilgili değilse o içeriği cevabına KESINLIKLE EKLEME. Öğrenci "liste nedir?"
+   diye soruyorsa for döngüsü, enumerate veya ortalama hesabı içeriğini cevaba katma —
+   bu kavramlar listelerle birlikte kullanılsa da soruyla alakasızdır.
+3. **Bilmiyorsan söyle:** Soru ders notlarında yoksa "Bu konu ders notlarımda yer almıyor."
+   de. ANCAK öğrenci "anlamadım" diyorsa bunu ASLA söyleme — bu kural sadece konu gerçekten
+   notlarda olmadığında geçerlidir.
+4. **Türkçe cevap ver:** Teknik terimlerin İngilizcelerini parantez içinde belirtebilirsin.
+5. **Özgün hedefi koru:** Öğrencinin ASIL sorusuna odaklan. Öğrenci sormadan yeni kavramlar
+   tanıtma, konuşma sırasında farklı bir konuya kayma.
+6. **Önce tanımla, sonra örnek ver:** Öğrenci bir kavramın ne olduğunu soruyorsa (örn. "liste
+   nedir?") ÖNCE kısaca tanımla, SONRA örnek ver. Tanım vermeden direkt karmaşık örneğe veya
+   Sokratik soruya atlama.
 
-## Sokratik Yönlendirme Kuralları
-4. **Doğrudan kod verme:** Öğrenci bir kod sorusu sorduğunda, ASLA hemen tam kodu yazma.
-5. **Adım adım yönlendir:** Önce düşündürücü bir soru sor veya bir ipucu ver.
-   - Seviye 1: "Bu problemi çözmek için hangi veri tipini kullanırdın?"
-   - Seviye 2: "for döngüsü burada işe yarar mı? Neden?"
-   - Seviye 3: Kısmi kod örneği ver, eksik kısmı öğrenciye bırak.
-6. **Öğrenci ısrar ederse:** 3. denemeden sonra tam çözümü gösterebilirsin, ama açıklama ekle.
+## Kısa Yanıt Yönetimi — KRİTİK
+7. **"Evet", "hayır", "tamam", "liste mi" gibi kısa yanıtlar:**
+   Öğrenci bir Sokratik soruyu onaylıyor ama henüz bir şey bilmiyor demektir.
+   BU DURUMDA: Öğrencinin asıl sorusuna geri dön ve kısa, net bir açıklama yap.
+   "evet" = "evet düşündüm ama hâlâ bilmiyorum, anlat" anlamına gelir. Yeni sorular AÇMA.
+
+## Doğru Cevap Tanıma — KRİTİK
+8. **Öğrenci doğru cevabı verirse:** Bunu açıkça tebrik et ("Evet, tam olarak doğru! ✅").
+   Cevabın neden doğru olduğunu kısaca açıkla ve orada dur. Aynı konuyu sorgulamaya
+   DEVAM ETME, yeni sorular SORMA.
+9. **Doğru yönde ilerliyorsa:** Bunu söyle ve cesaretlendir.
+
+## "Anlamadım" Durumu — KRİTİK
+10. Öğrenci "anlamadım", "anlayamadım", "karıştı", "daha detaylı anlat" gibi bir şey derse:
+    - Eğer öğrenci SENİN getirdiğin bir kavramı anlamadıysa (öğrenci sormamıştı, sen getirdin):
+      O kavramı BIRAK, öğrencinin ASİL sorusuna geri dön ve orada basit açıklama yap.
+    - Eğer öğrencinin kendi sorduğu kavramı anlamadıysa:
+      Daha BASIT ve TEMEL bir açıklama yap — daha karmaşık DEĞIL.
+    - Her iki durumda da "Bu konu ders notlarımda yok" DEME.
+    - Tek bir kavrama odaklan, günlük hayattan analoji kullan.
+
+## Sokratik Yönlendirme
+11. **Doğrudan kod verme:** Öğrenci bir şey yapmasını istediğinde hemen tam kodu yazma.
+12. **Adım adım yönlendir:** Önce düşündürücü bir soru sor veya ipucu ver.
+13. **İpucu seviyesi:** Mesajın sonunda [Pedagojik Rehberlik] notu varsa ona göre davran.
+    Bu notu cevabına ASLA YAZMA — sadece senin için dahili yönergedir, öğrenci görmemeli.
 
 ## Hata Analizi
-7. Öğrenci hatalı kod paylaşırsa:
-   - Hatayı doğrudan söyleme, önce "Kodunun şu satırını tekrar incele" gibi yönlendir.
-   - Sözdizimi hatası ise basit bir hatırlatma yap.
-   - Mantık hatası ise "Çıkış koşulunu kontrol ettin mi?" gibi düşündürücü soru sor.
+14. Öğrenci hatalı kod paylaşırsa hatayı doğrudan söyleme, önce yönlendir.
 
 ## Bağlam (Ders Notları)
 {context}
 """
 
 # ===== Soru Yoğunlaştırma Prompt'u =====
-CONDENSE_QUESTION_PROMPT = """Aşağıdaki konuşma geçmişini ve öğrencinin sorduğu son soruyu 
-kullanarak, ders notlarında arama yapmak için kullanılabilecek bağımsız bir soru oluştur.
-Özellikle 'listeler', 'döngüler' gibi anahtar kelimeleri ve teknik terimleri KORU.
+CONDENSE_QUESTION_PROMPT = """Aşağıdaki sohbet geçmişine ve son soruya bakarak,
+ders notlarında arama yapmak için TEMİZ bir bağımsız soru oluştur.
 
-Konuşma Geçmişi:
+KRİTİK KURALLAR:
+1. Yalnızca ÖĞRENCİNİN yazdığı mesajlara bak — asistanın cevaplarındaki örnekleri,
+   açıklamaları ve anahtar kelimeleri sorguya KATMA. Asistan yanlış içerik getirmiş
+   olabilir; onun geçmiş cevaplarına göre soru üretme.
+2. Öğrencinin ŞU AN ne sormak istediğine odaklan.
+3. "anlamadım", "tekrar anlat" gibi ifadelerde, öğrencinin bir önceki sorusunu temel al.
+4. Kısa, net bir Python kavram sorusu üret (örn: "tuple nedir?", "for döngüsü sözdizimi").
+
 {chat_history}
 Son Soru: {question}
 Bağımsız Soru:"""
@@ -100,12 +131,13 @@ def build_rag_chain(
 
     retriever = get_retriever(vector_store)
 
-    # Konuşma belleği – son 10 mesajı hatırlar
+    # Konuşma belleği – son 4 mesajı hatırlar (2 exchange)
+    # k=10 → k=4: kirli geçmişin retrieval'ı zehirlemesini önler
     memory = ConversationBufferWindowMemory(
         memory_key="chat_history",
         return_messages=True,
         output_key="answer",
-        k=10,
+        k=4,
     )
 
     # Prompt şablonu
@@ -128,9 +160,14 @@ def build_rag_chain(
     return chain
 
 
-def ask(chain, question: str) -> dict:
+def ask(chain, question: str, socratic_suffix: str = "") -> dict:
     """
     RAG zincirine soru sorar ve cevap + kaynakları döndürür.
+
+    Args:
+        chain: Oluşturulmuş RAG zinciri
+        question: Öğrencinin sorusu
+        socratic_suffix: SocraticManager'dan gelen pedagojik yönerge (opsiyonel)
 
     Returns:
         {
@@ -138,7 +175,12 @@ def ask(chain, question: str) -> dict:
             "sources": List[Document],
         }
     """
-    result = chain.invoke({"question": question})
+    if socratic_suffix:
+        augmented = f"{question}\n\n[Pedagojik Rehberlik]: {socratic_suffix.strip()}"
+    else:
+        augmented = question
+
+    result = chain.invoke({"question": augmented})
     return {
         "answer": result.get("answer", ""),
         "sources": result.get("source_documents", []),

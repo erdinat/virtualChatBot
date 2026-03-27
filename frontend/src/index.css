@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { margin: 0; background-color: #0d0a27; color: #e7e2ff; font-family: 'Inter', sans-serif; }
+  #root { width: 100%; max-width: 100%; border: none; text-align: left; }
+}
+
+@layer components {
+  .glass {
+    background: rgba(102,126,234,.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(151,169,255,.1);
+  }
+  .gradient-text {
+    background: linear-gradient(135deg,#667eea,#764ba2,#f093fb);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .gradient-bg { background: linear-gradient(135deg,#667eea,#764ba2,#f093fb); }
+  .gradient-bar {
+    background: linear-gradient(90deg,#667eea,#764ba2,#f093fb,#667eea);
+    background-size: 300% auto;
+    animation: shimmer 2.5s linear infinite;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 0 12px 12px 0;
+    border-left: 3px solid transparent;
+    color: #aca7cc;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all .2s;
+    cursor: pointer;
+    user-select: none;
+  }
+  .nav-item:hover { background: rgba(255,255,255,.05); color: #e7e2ff; }
+  .nav-item.active {
+    border-left-color: #97a9ff;
+    background: linear-gradient(90deg,rgba(151,169,255,.18),transparent);
+    color: #97a9ff;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #24204a; border-radius: 10px; }
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+.material-symbols-filled {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.shimmer-bar {
+  background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #667eea);
+  background-size: 300% auto;
+  animation: shimmerBar 2.5s linear infinite;
+}
+
+.glass-card {
+  background: rgba(102, 126, 234, 0.08);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(71, 68, 100, 0.15);
+  border-left: 1px solid rgba(71, 68, 100, 0.15);
+}

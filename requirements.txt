@@ -12,8 +12,18 @@ sentence-transformers>=3.0.0
 pypdf>=4.0.0
 pdfplumber>=0.11.0
 
-# --- Web Arayüzü ---
+# --- Web Arayüzü (Streamlit — eski, yerini FastAPI aldı) ---
 streamlit>=1.38.0
+streamlit-authenticator>=0.3.2
+PyYAML>=6.0
+
+# --- FastAPI Backend ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.2.0
+passlib[bcrypt]>=1.7.4
 
 # --- Derin Öğrenme (DKT & DRL) ---
 torch>=2.2.0
