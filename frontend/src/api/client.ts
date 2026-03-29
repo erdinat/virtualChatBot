@@ -49,7 +49,10 @@ export const askQuestion = (
   question: string,
   chat_history: { role: string; content: string }[],
   onToken: (token: string) => void,
-  onDone: (topicId: number | null) => void
+  onDone: (topicId: number | null) => void,
+  onError: () => void,
+  topic_id?: number | null,
+  topic_level?: string | null,
 ) => {
   const token = localStorage.getItem("access_token");
 
@@ -60,9 +63,12 @@ export const askQuestion = (
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ question, chat_history }),
+    body: JSON.stringify({ question, chat_history, topic_id, topic_level }),
   }).then(async (res) => {
-    const reader = res.body!.getReader();
+    if (!res.ok) { onError(); return; }
+    if (!res.body) { onError(); return; }
+
+    const reader = res.body.getReader();
     const decoder = new TextDecoder();
 
     while (true) {
@@ -75,12 +81,15 @@ export const askQuestion = (
       for (const line of lines) {
         try {
           const data = JSON.parse(line.slice(6));
+          if (data.error) { onError(); return; }
           if (data.token) onToken(data.token);
           if (data.done) onDone(data.topic_id ?? null);
-        } catch {}
+        } catch (e) {
+          console.warn("SSE parse error:", e);
+        }
       }
     }
-  });
+  }).catch(() => onError());
 };
 
 // ── Teacher ───────────────────────────────────────────────────────────────
@@ -89,6 +98,20 @@ export const getStudents   = () => api.get("/api/teacher/students").then((r) => 
 export const getLogs       = (username?: string, role?: string) =>
   api.get("/api/teacher/logs", { params: { username, role, last_n: 200 } }).then((r) => r.data);
 export const getCurriculum = () => api.get("/api/teacher/curriculum").then((r) => r.data);
+
+// ── Quiz & Diagnostic ─────────────────────────────────────────────────────
+
+export const getQuiz = (topic_id: number) =>
+  api.get(`/api/chat/quiz/${topic_id}`).then((r) => r.data);
+
+export const getDiagnosticQuestions = () =>
+  api.get("/api/diagnostic/questions").then((r) => r.data);
+
+export const submitDiagnostic = (answers: Record<string, string>) =>
+  api.post("/api/diagnostic/submit", { answers }).then((r) => r.data);
+
+export const assessTopicLevel = (topic_id: number, answers: Record<string, number>) =>
+  api.post("/api/diagnostic/topic-level", { topic_id, answers }).then((r) => r.data);
 
 // ── PDFs ──────────────────────────────────────────────────────────────────
 
@@ -101,3 +124,6 @@ export const uploadPdfs = (files: File[]) => {
 };
 
 export const getPdfStatus = () => api.get("/api/pdfs/status").then((r) => r.data);
+
+export const getChatHistory = (topic_id: number) =>
+  api.get(`/api/chat/history/${topic_id}`).then((r) => r.data);

@@ -40,17 +40,25 @@ def load_student_data(username: str) -> dict:
         return {"interaction_history": [], "student_mastery": {}}
 
 
-def save_student_data(username: str, interaction_history: list, student_mastery: dict):
+def save_student_data(username: str, interaction_history: list, student_mastery: dict, **extra):
     """Öğrencinin mevcut etkileşim geçmişini ve mastery skorlarını diske yazar."""
+    # Mevcut dosyadaki ek alanları koru (örn. diagnostic_done)
+    path = _student_path(username)
+    existing: dict = {}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+
     data = {
+        **existing,
         "interaction_history": interaction_history,
         "student_mastery": student_mastery,
         "last_updated": datetime.now().isoformat(),
+        **extra,
     }
-    _student_path(username).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_all_students() -> Dict[str, dict]:
@@ -72,10 +80,11 @@ def load_all_students() -> Dict[str, dict]:
 
 # ── Sistem Logları ───────────────────────────────────────────────────────────
 
-def append_chat_log(username: str, role: str, content: str):
+def append_chat_log(username: str, role: str, content: str, topic_id: int | None = None):
     """
     Sohbet mesajını sistem log dosyasına ekler.
     Her satır bir JSON nesnesidir (JSONL formatı).
+    topic_id varsa konu bazlı filtreleme için kaydedilir.
     """
     entry = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -83,8 +92,32 @@ def append_chat_log(username: str, role: str, content: str):
         "role": role,        # "user" veya "assistant"
         "content": content[:500],  # Çok uzun mesajları kırp
     }
+    if topic_id is not None:
+        entry["topic_id"] = topic_id
     with CHAT_LOG_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def load_topic_chat_history(username: str, topic_id: int, limit: int = 60) -> list[dict]:
+    """
+    Belirli kullanıcının belirli konuya ait son N mesajını kronolojik sırayla döner.
+    Returns: [{"role": str, "content": str, "timestamp": str}, ...]
+    """
+    if not CHAT_LOG_FILE.exists():
+        return []
+    entries = []
+    for line in CHAT_LOG_FILE.read_text(encoding="utf-8").strip().splitlines():
+        try:
+            e = json.loads(line)
+            if e.get("username") == username and e.get("topic_id") == topic_id:
+                entries.append({
+                    "role": e["role"],
+                    "content": e["content"],
+                    "timestamp": e["timestamp"],
+                })
+        except json.JSONDecodeError:
+            continue
+    return entries[-limit:]  # eski → yeni
 
 
 def load_chat_log(last_n: int = 100) -> List[dict]:

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.routers import auth, chat, mastery, teacher, pdfs
+from backend.routers import diagnostic
 
 app = FastAPI(
     title="Sanal Öğretmen Asistanı API",
@@ -26,7 +27,8 @@ app.include_router(auth.router,    prefix="/api/auth",    tags=["Auth"])
 app.include_router(chat.router,    prefix="/api/chat",    tags=["Chat"])
 app.include_router(mastery.router, prefix="/api/mastery", tags=["Mastery"])
 app.include_router(teacher.router, prefix="/api/teacher", tags=["Teacher"])
-app.include_router(pdfs.router,    prefix="/api/pdfs",    tags=["PDFs"])
+app.include_router(pdfs.router,        prefix="/api/pdfs",       tags=["PDFs"])
+app.include_router(diagnostic.router,  prefix="/api/diagnostic", tags=["Diagnostic"])
 
 
 @app.get("/api/health")

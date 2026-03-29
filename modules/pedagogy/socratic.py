@@ -92,14 +92,27 @@ class SocraticManager:
         """Deneme sayısını sıfırlar (yeni konuya geçildiğinde)."""
         self.attempt_tracker.pop(conversation_key, None)
 
-    def get_socratic_prompt_suffix(self, conversation_key: str) -> str:
+    def get_socratic_prompt_suffix(
+        self, conversation_key: str, topic_level: str = "beginner"
+    ) -> str:
         """
         Mevcut ipucu seviyesine göre prompt suffix'ini döndürür.
-        Bu suffix, LLM'e gönderilen prompt'a eklenir.
+        topic_level parametresi hint başlangıç seviyesini kalibre eder:
+          beginner     → standart sıra (1 → 2 → 3 → 4)
+          intermediate → en az seviye 2'den başla
+          advanced     → en az seviye 3'ten başla
         """
-        level = self.get_hint_level(conversation_key)
+        raw_level = self.get_hint_level(conversation_key)
         self.record_attempt(conversation_key)
-        return HINT_LEVELS[level]["prompt_suffix"]
+
+        if topic_level == "intermediate":
+            effective_level = max(raw_level, 2)
+        elif topic_level == "advanced":
+            effective_level = max(raw_level, 3)
+        else:
+            effective_level = raw_level
+
+        return HINT_LEVELS[effective_level]["prompt_suffix"]
 
     def get_current_level_info(self, conversation_key: str) -> dict:
         """Mevcut seviye bilgisini döndürür (UI için)."""

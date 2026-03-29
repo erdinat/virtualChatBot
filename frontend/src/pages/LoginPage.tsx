@@ -12,6 +12,7 @@ function SnakeCanvas({ btnRef, formRef }: {
   formRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [score, setScore] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -319,6 +320,7 @@ function SnakeCanvas({ btnRef, formRef }: {
 
     const triggerCatch = (cx: number, cy: number) => {
       snakeScore++;
+      setScore(snakeScore);
       ratHidden = true;
       ratHiddenTimer = 120; // 2s at 60fps
       flashTimer = 18;
@@ -350,15 +352,7 @@ function SnakeCanvas({ btnRef, formRef }: {
       else { mouse.x = 30; mouse.y = Math.random() * H; }
     };
 
-    /* ── score overlay ── */
-    const drawScore = (W: number) => {
-      ctx.save();
-      ctx.font = "bold 14px 'Inter', sans-serif";
-      ctx.fillStyle = "rgba(151,169,255,0.7)";
-      ctx.textAlign = "right";
-      ctx.fillText(`🐍 ${snakeScore}`, W - 20, 30);
-      ctx.restore();
-    };
+    /* score is rendered as HTML overlay — see JSX return */
 
     /* ── flash overlay ── */
     const drawFlash = (W: number, H: number) => {
@@ -418,7 +412,7 @@ function SnakeCanvas({ btnRef, formRef }: {
       const formRect = formRef.current?.getBoundingClientRect();
       const mouseOverForm = formRect
         ? mouse.x >= formRect.left - 20 && mouse.x <= formRect.right + 20
-          && mouse.y >= formRect.top - 20 && mouse.y <= formRect.bottom + 20
+        && mouse.y >= formRect.top - 20 && mouse.y <= formRect.bottom + 20
         : false;
 
       // Rat respawn countdown
@@ -463,7 +457,6 @@ function SnakeCanvas({ btnRef, formRef }: {
       drawParticles();
       drawFloatingTexts();
       drawFlash(W, H);
-      drawScore(W);
       if (!ratHidden) drawRat(mouse.x, mouse.y, mouseOverForm);
 
       raf = requestAnimationFrame(loop);
@@ -478,14 +471,33 @@ function SnakeCanvas({ btnRef, formRef }: {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, zIndex: 15, pointerEvents: "none" }} />;
+  return (
+    <>
+      <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, zIndex: 15, pointerEvents: "none" }} />
+      <div style={{
+        position: "fixed", top: 14, right: 20, zIndex: 16,
+        display: "flex", alignItems: "center", gap: "6px",
+        pointerEvents: "none",
+      }}>
+        <img
+          src="https://cdn-icons-png.flaticon.com/512/1067/1067891.png"
+          alt="snake"
+          style={{ width: "22px", height: "22px", objectFit: "contain", opacity: 0.8 }}
+        />
+        <span style={{
+          fontFamily: "'Inter', sans-serif", fontWeight: 700,
+          fontSize: "14px", color: "rgba(151,169,255,0.8)",
+        }}>{score}</span>
+      </div>
+    </>
+  );
 }
 
 /* ── Floating background code cards ──────────────────── */
 interface CodeLine { text: string; color: string; indent?: boolean }
 
 function FloatingCodeCard({
-  lines, pos, rot, floatDuration, floatDelay, entryFrom, scale = 1,
+  lines, pos, rot, floatDuration, floatDelay, entryFrom, scale = 1, depth = 1, mouseX = 0, mouseY = 0,
 }: {
   lines: CodeLine[];
   pos: React.CSSProperties;
@@ -494,16 +506,29 @@ function FloatingCodeCard({
   floatDelay: number;
   entryFrom: { x?: number; y?: number };
   scale?: number;
+  depth?: number;
+  mouseX?: number;
+  mouseY?: number;
 }) {
   return (
-    <motion.div
+    <div
       className="hidden lg:block"
+      style={{
+        position: "fixed", zIndex: 1, pointerEvents: "none",
+        transform: `translate(${mouseX * depth * 18}px, ${mouseY * depth * 14}px)`,
+        transition: "transform 0.9s cubic-bezier(0.25,0.46,0.45,0.94)",
+        ...pos,
+      }}
+    >
+    <motion.div
       initial={{ opacity: 0, x: entryFrom.x ?? 0, y: entryFrom.y ?? 0 }}
       animate={{ opacity: 1, x: 0, y: 0 }}
       transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
       whileHover={{ scale: scale * 1.07, zIndex: 5 }}
-      style={{ position: "fixed", zIndex: 1, pointerEvents: "auto", cursor: "default",
-        transform: `scale(${scale})`, ...pos }}
+      style={{
+        pointerEvents: "auto", cursor: "default",
+        transform: `scale(${scale})`,
+      }}
     >
       <motion.div
         animate={{ y: [0, -12, 0], rotate: [rot, rot - 0.8, rot] }}
@@ -519,7 +544,7 @@ function FloatingCodeCard({
           boxShadow: "0 8px 32px rgba(0,0,0,.3)",
         }}>
           <div style={{ display: "flex", gap: "5px", marginBottom: "10px" }}>
-            {["#ff6e84","#fbbf24","#4ade80"].map(c => (
+            {["#ff6e84", "#fbbf24", "#4ade80"].map(c => (
               <div key={c} style={{ width: "8px", height: "8px", borderRadius: "50%", background: c }} />
             ))}
           </div>
@@ -541,7 +566,7 @@ function FloatingCodeCard({
           boxShadow: "0 20px 56px rgba(0,0,0,.55), 0 0 0 0.5px rgba(151,169,255,.08) inset",
         }}>
           <div style={{ display: "flex", gap: "5px", marginBottom: "10px" }}>
-            {["#ff6e84","#fbbf24","#4ade80"].map(c => (
+            {["#ff6e84", "#fbbf24", "#4ade80"].map(c => (
               <div key={c} style={{ width: "7px", height: "7px", borderRadius: "50%", background: c }} />
             ))}
           </div>
@@ -557,6 +582,7 @@ function FloatingCodeCard({
         </div>
       </motion.div>
     </motion.div>
+    </div>
   );
 }
 
@@ -611,15 +637,15 @@ const FLOATING_CARDS = [
 /* ── Demo accounts with flip cards ───────────────────── */
 const DEMOS = [
   {
-    username: "ali", password: "ali123", label: "Ali", role: "Öğrenci", icon: "👨‍💻",
+    username: "ali", password: "ali123", label: "Ali", role: "Öğrenci", icon: "https://cdn-icons-png.flaticon.com/512/4202/4202839.png",
     code: [`x = "Python"`, `print(f"Merhaba,`, `  {x}!")`, `# Değişkenler ✓`],
   },
   {
-    username: "ayse", password: "ayse123", label: "Ayşe", role: "Öğrenci", icon: "👩‍💻",
+    username: "ayse", password: "ayse123", label: "Ayşe", role: "Öğrenci", icon: "https://cdn-icons-png.flaticon.com/512/4202/4202850.png",
     code: [`for i in range(3):`, `  print("Öğren!")`, `# Döngüler ✓`],
   },
   {
-    username: "ogretmen", password: "ogr123", label: "Öğretmen", role: "Eğitmen", icon: "👩‍🏫",
+    username: "ogretmen", password: "ogr123", label: "Öğretmen", role: "Eğitmen", icon: "https://cdn-icons-png.flaticon.com/512/4202/4202843.png",
     code: [`def ders_ver(k):`, `  return k+"✓"`, `# Fonksiyon ✓`],
   },
 ];
@@ -659,7 +685,7 @@ function FlipCard({ acc, selected, onClick }: {
           justifyContent: "center", gap: "6px",
           boxShadow: selected ? "0 0 20px rgba(151,169,255,.15)" : "none",
         }}>
-          <span style={{ fontSize: "24px" }}>{acc.icon}</span>
+          <img src={acc.icon} alt={acc.label} style={{ width: "36px", height: "36px", objectFit: "contain" }} />
           <span style={{ fontSize: "13px", fontWeight: 700, color: selected ? "#97a9ff" : "#e7e2ff" }}>
             {acc.label}
           </span>
@@ -678,7 +704,7 @@ function FlipCard({ acc, selected, onClick }: {
           overflow: "hidden",
         }}>
           <div style={{ display: "flex", gap: "5px", marginBottom: "8px" }}>
-            {["#ff6e84","#fbbf24","#4ade80"].map(c => (
+            {["#ff6e84", "#fbbf24", "#4ade80"].map(c => (
               <div key={c} style={{ width: "8px", height: "8px", borderRadius: "50%", background: c }} />
             ))}
           </div>
@@ -712,6 +738,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState<"user" | "pass" | null>(null);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => setMouse({
+      x: (e.clientX - window.innerWidth / 2) / window.innerWidth,
+      y: (e.clientY - window.innerHeight / 2) / window.innerHeight,
+    });
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
   const setAuth = useAuthStore((s) => s.setAuth);
   const navigate = useNavigate();
 
@@ -744,8 +780,10 @@ export default function LoginPage() {
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#07051a", position: "relative", overflow: "hidden",
-      display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{
+      minHeight: "100vh", background: "#07051a", position: "relative", overflow: "hidden",
+      display: "flex", alignItems: "center", justifyContent: "center"
+    }}>
 
       {/* Particle canvas */}
       <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }} />
@@ -754,16 +792,20 @@ export default function LoginPage() {
       <SnakeCanvas btnRef={btnRef} formRef={formRef} />
 
       {/* Ambient blobs */}
-      <div style={{ position: "fixed", top: "-20%", left: "-10%", width: "60%", height: "60%",
+      <div style={{
+        position: "fixed", top: "-20%", left: "-10%", width: "60%", height: "60%",
         borderRadius: "50%", background: "radial-gradient(#5c6bc0,transparent 70%)",
-        filter: "blur(80px)", opacity: 0.18, zIndex: 0, pointerEvents: "none" }} />
-      <div style={{ position: "fixed", bottom: "-20%", right: "-10%", width: "60%", height: "60%",
+        filter: "blur(80px)", opacity: 0.18, zIndex: 0, pointerEvents: "none"
+      }} />
+      <div style={{
+        position: "fixed", bottom: "-20%", right: "-10%", width: "60%", height: "60%",
         borderRadius: "50%", background: "radial-gradient(#9c27b0,transparent 70%)",
-        filter: "blur(80px)", opacity: 0.18, zIndex: 0, pointerEvents: "none" }} />
+        filter: "blur(80px)", opacity: 0.18, zIndex: 0, pointerEvents: "none"
+      }} />
 
       {/* Floating code cards — 4 corners */}
       {FLOATING_CARDS.map((card, i) => (
-        <FloatingCodeCard key={i} {...card} />
+        <FloatingCodeCard key={i} {...card} depth={[0.8, 1.4, 1.0, 1.2][i]} mouseX={mouse.x} mouseY={mouse.y} />
       ))}
 
       {/* ── Main card ── */}
@@ -772,8 +814,10 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 36, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        style={{ position: "relative", zIndex: 10, width: "100%", maxWidth: "440px",
-          margin: "0 16px", display: "flex", flexDirection: "column" }}
+        style={{
+          position: "relative", zIndex: 10, width: "100%", maxWidth: "440px",
+          margin: "0 16px", display: "flex", flexDirection: "column"
+        }}
       >
         {/* Gradient border */}
         <div style={{
@@ -842,8 +886,10 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               {/* Username */}
               <div>
-                <label style={{ display: "block", fontSize: "11px", fontWeight: 700,
-                  textTransform: "uppercase", letterSpacing: "0.1em", color: "#aca7cc", marginBottom: "8px" }}>
+                <label style={{
+                  display: "block", fontSize: "11px", fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: "0.1em", color: "#aca7cc", marginBottom: "8px"
+                }}>
                   Kullanıcı Adı
                 </label>
                 <div style={{ position: "relative" }}>
@@ -864,8 +910,10 @@ export default function LoginPage() {
 
               {/* Password */}
               <div>
-                <label style={{ display: "block", fontSize: "11px", fontWeight: 700,
-                  textTransform: "uppercase", letterSpacing: "0.1em", color: "#aca7cc", marginBottom: "8px" }}>
+                <label style={{
+                  display: "block", fontSize: "11px", fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: "0.1em", color: "#aca7cc", marginBottom: "8px"
+                }}>
                   Şifre
                 </label>
                 <div style={{ position: "relative" }}>
@@ -902,9 +950,11 @@ export default function LoginPage() {
                 <span style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                   {loading ? (
                     <>
-                      <span style={{ width: "16px", height: "16px", borderRadius: "50%",
+                      <span style={{
+                        width: "16px", height: "16px", borderRadius: "50%",
                         border: "2px solid rgba(255,255,255,.4)", borderTopColor: "white",
-                        display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+                        display: "inline-block", animation: "spin 0.8s linear infinite"
+                      }} />
                       Giriş yapılıyor…
                     </>
                   ) : (
@@ -920,12 +970,18 @@ export default function LoginPage() {
 
             {/* Divider */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px" }}>
-              <div style={{ flex: 1, height: "1px",
-                background: "linear-gradient(to right,transparent,rgba(71,68,100,.45))" }} />
-              <span style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.12em",
-                color: "#474464", fontWeight: 600 }}>Demo hesapları</span>
-              <div style={{ flex: 1, height: "1px",
-                background: "linear-gradient(to left,transparent,rgba(71,68,100,.45))" }} />
+              <div style={{
+                flex: 1, height: "1px",
+                background: "linear-gradient(to right,transparent,rgba(71,68,100,.45))"
+              }} />
+              <span style={{
+                fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.12em",
+                color: "#474464", fontWeight: 600
+              }}>Demo hesapları</span>
+              <div style={{
+                flex: 1, height: "1px",
+                background: "linear-gradient(to left,transparent,rgba(71,68,100,.45))"
+              }} />
             </div>
 
             {/* Flip cards */}
@@ -939,16 +995,20 @@ export default function LoginPage() {
                 />
               ))}
             </div>
-            <p style={{ textAlign: "center", fontSize: "11px", color: "rgba(117,114,148,.5)",
-              marginTop: "10px", marginBottom: 0 }}>
+            <p style={{
+              textAlign: "center", fontSize: "11px", color: "rgba(117,114,148,.5)",
+              marginTop: "10px", marginBottom: 0
+            }}>
               Üzerine gelin → kodu görün · Tıklayın → formu doldurun
             </p>
           </div>
         </div>
 
-        <p style={{ textAlign: "center", fontSize: "11px", color: "rgba(172,167,204,.3)",
-          marginTop: "20px" }}>
-          © 2024 Sanal Öğretmen Asistanı · Tüm hakları saklıdır
+        <p style={{
+          textAlign: "center", fontSize: "11px", color: "rgba(172,167,204,.3)",
+          marginTop: "20px"
+        }}>
+          © 2026 Sanal Öğretmen Asistanı · YERDİNAT VE ECENAZ
         </p>
       </motion.div>
 

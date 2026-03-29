@@ -86,6 +86,12 @@ def predict_mastery(
     if not interaction_history:
         return {topic["name"]: 0.0 for topic in CURRICULUM}
 
+    # DKT modeli az veriyle güvenilir tahmin üretemez; yeterli etkileşim yoksa
+    # kural tabanlı yöntemi kullan (sadece etkileşilen konuyu günceller).
+    MIN_INTERACTIONS = 10
+    if len(interaction_history) < MIN_INTERACTIONS:
+        return _rule_based_mastery(interaction_history)
+
     if model is None:
         model = _load_model_if_exists()
 

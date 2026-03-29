@@ -27,7 +27,11 @@ def record_feedback(req: FeedbackRequest, user: dict = Depends(get_current_user)
     if req.topic_id is not None:
         history.append({"skill_id": req.topic_id, "correct": req.correct})
 
-    new_mastery = predict_mastery(interaction_history=history)
+    try:
+        new_mastery = predict_mastery(interaction_history=history)
+    except Exception:
+        new_mastery = data["student_mastery"]
+
     save_student_data(user["username"], history, new_mastery)
 
     return {"student_mastery": new_mastery, "interaction_history": history}

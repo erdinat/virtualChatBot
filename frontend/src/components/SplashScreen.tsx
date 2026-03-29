@@ -38,7 +38,9 @@ export default function SplashScreen({ onComplete }: Props) {
   useEffect(() => {
     const t1 = setTimeout(() => setShowText(true), 2200);
     const t2 = setTimeout(dismiss, DURATION);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); dismiss(); } };
+    window.addEventListener("keydown", onKey);
+    return () => { clearTimeout(t1); clearTimeout(t2); window.removeEventListener("keydown", onKey); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -56,6 +58,7 @@ export default function SplashScreen({ onComplete }: Props) {
             autoPlay
             muted
             playsInline
+            tabIndex={-1}
             onEnded={dismiss}
             style={{
               position: "absolute", inset: 0,

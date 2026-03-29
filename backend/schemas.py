@@ -29,6 +29,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     chat_history: List[ChatMessage] = []
+    topic_id: Optional[int] = None      # Seçilen konu (müfredat kartından)
+    topic_level: Optional[str] = None   # "beginner" | "intermediate" | "advanced"
 
 
 class FeedbackRequest(BaseModel):

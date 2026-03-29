@@ -20,6 +20,24 @@ router = APIRouter()
 _socratic_managers: dict[str, SocraticManager] = {}
 _rag_chain_cache: dict = {"chain": None}
 
+# Konu bazlı seviye prompt'ları — ön test sonrası chat'te kullanılır
+_LEVEL_PROMPT: dict[str, str] = {
+    "beginner": (
+        "Öğrenci bu konuya yeni başlıyor. "
+        "Temel kavramları basit dil ve günlük hayat örnekleriyle açıkla. "
+        "Karmaşık edge-case'lere girme; adım adım ilerle."
+    ),
+    "intermediate": (
+        "Öğrenci temel kavramları biliyor; temel tekrarı atla. "
+        "Orta-ileri konulara odaklan: iç içe yapılar, özel durumlar, yaygın hatalar."
+    ),
+    "advanced": (
+        "Öğrenci konuda yetkindir. "
+        "Zorlu örnekler, Pythonic kalıplar ve uç durumlar üzerinden ilerle. "
+        "Performans, okunabilirlik ve best-practice'lere değin."
+    ),
+}
+
 _TOPIC_KEYWORDS = {
     1: ["değişken", "veri tipi", "string", "integer", "float", "bool"],
     2: ["operatör", "operator", "ifade", "aritmetik", "modulo"],
@@ -88,7 +106,11 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
     username = user["username"]
     question = req.question.strip()
 
-    append_chat_log(username, "user", question)
+    # Konu tespiti: önce req'ten, yoksa keyword ile (log çağrısından önce yapılmalı)
+    simplify = _is_simplify(question)
+    topic_id = req.topic_id or _detect_topic(question)
+
+    append_chat_log(username, "user", question, topic_id=topic_id)
 
     # Sokratik manager
     if username not in _socratic_managers:
@@ -98,7 +120,7 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
     # Anladım kontrolü
     if _is_understood(question):
         response = "Harika! Anladığın için sevindim 😊 Başka sorun var mı?"
-        append_chat_log(username, "assistant", response)
+        append_chat_log(username, "assistant", response, topic_id=topic_id)
 
         async def stream_understood():
             async for chunk in _stream_response(response):
@@ -107,9 +129,6 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
 
         return StreamingResponse(stream_understood(), media_type="text/event-stream")
 
-    # Konu tespiti
-    simplify = _is_simplify(question)
-    topic_id = _detect_topic(question)
     topic_name = next((t["name"] for t in CURRICULUM if t["id"] == topic_id), None) if topic_id else None
 
     # RAG sorgu hazırlama
@@ -120,14 +139,31 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
             f"(1) tek cümle tanım, (2) günlük hayattan benzetme, (3) tek satır kod."
         )
     else:
-        rag_query = question
-        socratic_suffix = socratic.get_socratic_prompt_suffix(topic_name) if topic_name else ""
-        data = load_student_data(username)
-        total = len(data["interaction_history"])
-        studied = {k: v for k, v in data["student_mastery"].items() if v > 0}
-        avg = sum(studied.values()) / len(studied) if studied else 0.0
-        level = "başlangıç" if avg < 0.4 else ("orta" if avg < 0.65 else "ileri")
-        level_ctx = f"Öğrenci seviyesi: {level} ({total} etkileşim). Buna göre örnekler kullan."
+        # Seviye bazlı RAG sorgu zenginleştirmesi
+        if topic_name and req.topic_level == "intermediate":
+            rag_query = f"{topic_name} ileri kavramlar — {question}"
+        elif topic_name and req.topic_level == "advanced":
+            rag_query = f"{topic_name} uzmanlık düzeyi — {question}"
+        else:
+            rag_query = question
+
+        # Sokratik suffix — seviye parametresi ile kalibre edilmiş
+        socratic_suffix = (
+            socratic.get_socratic_prompt_suffix(topic_name, req.topic_level or "beginner")
+            if topic_name else ""
+        )
+
+        # Seviye bağlamı: req.topic_level varsa hedefli, yoksa avg mastery'den hesapla
+        if req.topic_level and req.topic_level in _LEVEL_PROMPT:
+            level_ctx = _LEVEL_PROMPT[req.topic_level]
+        else:
+            data = load_student_data(username)
+            total = len(data["interaction_history"])
+            studied = {k: v for k, v in data["student_mastery"].items() if v > 0}
+            avg = sum(studied.values()) / len(studied) if studied else 0.0
+            level_label = "başlangıç" if avg < 0.4 else ("orta" if avg < 0.65 else "ileri")
+            level_ctx = f"Öğrenci genel seviyesi: {level_label} ({total} etkileşim). Buna göre örnekler kullan."
+
         suffix = f"{socratic_suffix}\n{level_ctx}".strip()
 
     chain = _get_rag_chain()
@@ -141,7 +177,7 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
             else:
                 response_text = "📚 Henüz ders notu yüklenmedi. Lütfen öğretmeninize bildirin."
 
-            append_chat_log(username, "assistant", response_text)
+            append_chat_log(username, "assistant", response_text, topic_id=topic_id)
 
             # Kelime kelime stream
             words = response_text.split(" ")
@@ -158,10 +194,41 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+@router.get("/history/{topic_id}")
+def get_topic_history(topic_id: int, user: dict = Depends(get_current_user)):
+    """Öğrencinin belirtilen konudaki sohbet geçmişini döner (kronolojik)."""
+    from modules.storage import load_topic_chat_history
+    messages = load_topic_chat_history(user["username"], topic_id, limit=60)
+    return {"messages": messages}
+
+
 @router.get("/next-topic")
 def next_topic(user: dict = Depends(get_current_user)):
-    """DRL politikasından bir sonraki konu önerisini döner."""
+    """
+    DRL/kural tabanlı politikadan sonraki konu önerisini döner.
+    suggest_test: true ise mevcut konuда ara değerlendirme önerisi var demektir.
+    """
     data = load_student_data(user["username"])
+    mastery = data["student_mastery"]
     policy = RuleBasedPolicy()
-    suggestion = policy.select_next_topic(data["student_mastery"])
-    return suggestion
+    suggestion = policy.select_next_topic(mastery)
+
+    # Önerilen konu için ara değerlendirme gerekli mi?
+    topic_name = suggestion.get("topic", {}).get("name")
+    suggest_test = policy.should_test(mastery, topic_name) if topic_name else False
+
+    return {**suggestion, "suggest_test": suggest_test}
+
+
+@router.get("/quiz/{topic_id}")
+def get_quiz(topic_id: int, _user: dict = Depends(get_current_user)):
+    """Belirtilen konu için 3 soruluk ara değerlendirme soruları döner (cevap dahil değil)."""
+    from config.quiz_questions import get_questions_for_topic
+    questions = get_questions_for_topic(topic_id)
+    if not questions:
+        return {"questions": []}
+    safe = [
+        {"topic_id": topic_id, "text": q["text"], "options": q["options"]}
+        for q in questions
+    ]
+    return {"questions": safe}
