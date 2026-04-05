@@ -43,6 +43,9 @@ Thumbs.db
 # ===== Streamlit =====
 .streamlit/secrets.toml
 
+# ===== Kullanıcı Kimlik Bilgileri =====
+config/users.yaml
+
 # ===== Kullanıcı Verileri =====
 data/student_logs/
 data/system_logs/

@@ -1,8 +1,11 @@
 """Chat endpoint — SSE streaming ile yanıt akışı."""
 
 import json
+import logging
 import asyncio
 from typing import AsyncGenerator
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -80,8 +83,9 @@ def _get_rag_chain():
             vs = load_vector_store()
             if vs:
                 _rag_chain_cache["chain"] = build_rag_chain(vector_store=vs)
-        except Exception:
-            pass
+                _rag_chain_cache["vector_store"] = vs
+        except Exception as e:
+            logger.error("RAG chain yüklenemedi: %s", e)
     return _rag_chain_cache["chain"]
 
 
@@ -91,7 +95,7 @@ async def _stream_response(text: str) -> AsyncGenerator[str, None]:
     for i, word in enumerate(words):
         chunk = word if i == len(words) - 1 else word + " "
         yield f"data: {json.dumps({'token': chunk})}\n\n"
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(0)
     yield f"data: {json.dumps({'done': True})}\n\n"
 
 
@@ -190,11 +194,12 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
             for i, word in enumerate(words):
                 chunk = word if i == len(words) - 1 else word + " "
                 yield f"data: {json.dumps({'token': chunk})}\n\n"
-                await asyncio.sleep(0.018)
+                await asyncio.sleep(0)
 
             yield f"data: {json.dumps({'done': True, 'topic_id': topic_id})}\n\n"
 
         except Exception as e:
+            logger.error("Chat generate hatası (user=%s): %s", username, e)
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

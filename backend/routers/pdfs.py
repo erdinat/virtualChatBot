@@ -10,6 +10,7 @@ from backend.routers.chat import _rag_chain_cache
 router = APIRouter()
 
 RAW_PDFS_PATH = Path("data/raw_pdfs")
+MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -32,8 +33,16 @@ async def upload_pdfs(
     for upload in files:
         if not upload.filename.endswith(".pdf"):
             continue
-        dest = RAW_PDFS_PATH / upload.filename
-        dest.write_bytes(await upload.read())
+        # Path traversal koruması — sadece dosya adını al, path bileşenlerini at
+        safe_name = Path(upload.filename).name
+        dest = RAW_PDFS_PATH / safe_name
+        content = await upload.read()
+        if len(content) > MAX_PDF_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{safe_name} dosyası 10 MB limitini aşıyor ({len(content)//1024//1024} MB)"
+            )
+        dest.write_bytes(content)
         saved.append(dest)
 
     try:

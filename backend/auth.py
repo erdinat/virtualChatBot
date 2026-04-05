@@ -1,5 +1,7 @@
 """JWT kimlik doğrulama yardımcı fonksiyonları."""
 
+import os
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -10,7 +12,14 @@ from jose import jwt, JWTError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-SECRET_KEY = "sta_jwt_secret_2024_sanal_ogretmen"
+logger = logging.getLogger(__name__)
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET_KEY ortam değişkeni tanımlı değil. "
+        ".env dosyasına JWT_SECRET_KEY=<güçlü-rastgele-değer> ekleyin."
+    )
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -27,7 +36,8 @@ def _load_users() -> dict:
 def verify_password(plain: str, hashed: str) -> bool:
     try:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.warning("Şifre doğrulama hatası: %s", e)
         return False
 
 

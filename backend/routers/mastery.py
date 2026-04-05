@@ -1,6 +1,10 @@
+import logging
+
 from fastapi import APIRouter, Depends
 
 from backend.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 from backend.schemas import MasteryResponse, FeedbackRequest
 from modules.storage import load_student_data, save_student_data
 from modules.dkt.predict import predict_mastery
@@ -29,7 +33,8 @@ def record_feedback(req: FeedbackRequest, user: dict = Depends(get_current_user)
 
     try:
         new_mastery = predict_mastery(interaction_history=history)
-    except Exception:
+    except Exception as e:
+        logger.warning("DKT predict hatası, mevcut mastery korunuyor: %s", e)
         new_mastery = data["student_mastery"]
 
     save_student_data(user["username"], history, new_mastery)

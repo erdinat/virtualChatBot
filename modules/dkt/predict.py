@@ -5,11 +5,15 @@ Eğitilmiş DKT modeli ile öğrencinin anlık bilgi seviyesini tahmin eder.
 Model yoksa kural tabanlı fallback kullanılır.
 """
 
+import logging
+
 import torch
 from typing import List, Dict, Optional
 
 from config.settings import CURRICULUM, DKTConfig
 from modules.dkt.model import DKTModel
+
+logger = logging.getLogger(__name__)
 
 # Modeli bir kez yükle, sonraki çağrılarda cache'den kullan
 _cached_model: Optional[DKTModel] = None
@@ -105,7 +109,11 @@ def predict_mastery(
     input_tensor = torch.zeros(1, seq_len, num_skills * 2)
 
     for t, interaction in enumerate(interaction_history):
-        skill_id = interaction["skill_id"] - 1  # 0-indexed
+        raw_skill_id = interaction.get("skill_id", 0)
+        if not (1 <= raw_skill_id <= num_skills):
+            logger.warning("Geçersiz skill_id=%s, atlanıyor", raw_skill_id)
+            continue
+        skill_id = raw_skill_id - 1  # 0-indexed
         correct = interaction["correct"]
 
         if correct:

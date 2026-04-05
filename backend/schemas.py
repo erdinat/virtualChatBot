@@ -1,7 +1,7 @@
 """Pydantic şemaları — request / response modelleri."""
 
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from typing import List, Literal, Optional, Dict
+from pydantic import BaseModel, Field
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -27,14 +27,14 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    question: str
-    chat_history: List[ChatMessage] = []
-    topic_id: Optional[int] = None      # Seçilen konu (müfredat kartından)
-    topic_level: Optional[str] = None   # "beginner" | "intermediate" | "advanced"
+    question: str = Field(..., min_length=1, max_length=2000)
+    chat_history: List[ChatMessage] = Field(default=[], max_length=50)
+    topic_id: Optional[int] = Field(default=None, ge=1, le=10)
+    topic_level: Optional[Literal["beginner", "intermediate", "advanced"]] = None
 
 
 class FeedbackRequest(BaseModel):
-    topic_id: Optional[int] = None
+    topic_id: Optional[int] = Field(default=None, ge=1, le=10)
     correct: bool
 
 
