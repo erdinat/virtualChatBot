@@ -51,6 +51,14 @@ def load_all_pdfs(directory: str | Path = None) -> List[Document]:
     return all_documents
 
 
+def tag_documents_with_topic(documents: List[Document], topic_id: int | None) -> List[Document]:
+    """Chunk'lara topic_id metadata alanı ekler. RAG filtreleme için kullanılır."""
+    if topic_id is not None:
+        for doc in documents:
+            doc.metadata["topic_id"] = topic_id
+    return documents
+
+
 def split_documents(
     documents: List[Document],
     chunk_size: int = None,

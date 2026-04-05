@@ -18,7 +18,7 @@ router = APIRouter()
 
 # Basit in-memory cache (production'da Redis kullanılabilir)
 _socratic_managers: dict[str, SocraticManager] = {}
-_rag_chain_cache: dict = {"chain": None}
+_rag_chain_cache: dict = {"chain": None, "vector_store": None}
 
 # Konu bazlı seviye prompt'ları — ön test sonrası chat'te kullanılır
 _LEVEL_PROMPT: dict[str, str] = {
@@ -172,7 +172,13 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
         try:
             if chain:
                 from modules.rag import ask as rag_ask
-                result = rag_ask(chain, rag_query, socratic_suffix=suffix)
+                from modules.rag.chain import build_rag_chain
+                vs = _rag_chain_cache.get("vector_store")
+                active_chain = (
+                    build_rag_chain(vector_store=vs, topic_id=topic_id)
+                    if topic_id and vs else chain
+                )
+                result = rag_ask(active_chain, rag_query, socratic_suffix=suffix)
                 response_text = result["answer"]
             else:
                 response_text = "📚 Henüz ders notu yüklenmedi. Lütfen öğretmeninize bildirin."

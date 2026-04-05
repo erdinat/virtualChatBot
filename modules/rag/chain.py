@@ -114,6 +114,7 @@ def get_llm(
 def build_rag_chain(
     llm: Optional[ChatOpenAI] = None,
     vector_store=None,
+    topic_id: int | None = None,
 ):
     """
     RAG zincirini oluşturur: Retriever + LLM + Konuşma Belleği.
@@ -129,7 +130,7 @@ def build_rag_chain(
                 "Vektör veritabanı bulunamadı. Önce PDF yükleyip veritabanını oluşturun."
             )
 
-    retriever = get_retriever(vector_store)
+    retriever = get_retriever(vector_store, topic_id=topic_id)
 
     # Konuşma belleği – son 4 mesajı hatırlar (2 exchange)
     # k=10 → k=4: kirli geçmişin retrieval'ı zehirlemesini önler

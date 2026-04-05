@@ -1,6 +1,6 @@
 """RAG Pipeline paket modülü."""
 
-from modules.rag.pdf_loader import load_single_pdf, load_all_pdfs, split_documents
+from modules.rag.pdf_loader import load_single_pdf, load_all_pdfs, split_documents, tag_documents_with_topic
 from modules.rag.embeddings import (
     get_embedding_model,
     create_vector_store,
@@ -13,6 +13,7 @@ __all__ = [
     "load_single_pdf",
     "load_all_pdfs",
     "split_documents",
+    "tag_documents_with_topic",
     "get_embedding_model",
     "create_vector_store",
     "load_vector_store",

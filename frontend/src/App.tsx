@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import StudentPage from "./pages/StudentPage";
 import TeacherPage from "./pages/TeacherPage";
 import DiagnosticPage from "./pages/DiagnosticPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import SplashScreen from "./components/SplashScreen";
 
 const qc = new QueryClient();
@@ -24,7 +25,9 @@ function RootRedirect() {
   if (role === "teacher") return <Navigate to="/teacher" replace />;
   // Students go to diagnostic first if not done (checked via localStorage flag)
   const diagKey = `diagnostic_done_${username}`;
+  const onboardingKey = `onboarding_done_${username}`;
   if (!localStorage.getItem(diagKey)) return <Navigate to="/diagnostic" replace />;
+  if (!localStorage.getItem(onboardingKey)) return <Navigate to="/onboarding" replace />;
   return <Navigate to="/student" replace />;
 }
 
@@ -67,6 +70,14 @@ export default function App() {
               element={
                 <ProtectedRoute requiredRole="student">
                   <DiagnosticPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute requiredRole="student">
+                  <OnboardingPage />
                 </ProtectedRoute>
               }
             />

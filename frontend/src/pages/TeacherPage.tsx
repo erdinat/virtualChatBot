@@ -235,14 +235,22 @@ function LogsTab() {
 function CurriculumTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<number[]>([]);
   const { data: pdfStatus, refetch } = useQuery({ queryKey: ["pdfStatus"], queryFn: getPdfStatus });
   const { data: curriculum = [] } = useQuery({ queryKey: ["curriculum"], queryFn: getCurriculum });
 
+  function toggleTopic(id: number) {
+    setSelectedTopicIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
   const uploadMutation = useMutation({
-    mutationFn: () => uploadPdfs(files),
+    mutationFn: () => uploadPdfs(files, selectedTopicIds),
     onSuccess: (data: any) => {
       toast.success(`${data.files_processed} PDF işlendi, ${data.chunks_created} parça oluşturuldu!`);
       setFiles([]);
+      setSelectedTopicIds([]);
       refetch();
     },
     onError: () => toast.error("PDF yükleme başarısız"),
@@ -315,6 +323,34 @@ function CurriculumTab() {
             onChange={(e) => setFiles(Array.from(e.target.files ?? []).filter((f) => f.name.endsWith(".pdf")))}
             className="hidden"
           />
+        </div>
+
+        {/* Konu etiketleri */}
+        <div className="p-4 rounded-xl glass-card">
+          <p className="text-xs font-semibold text-on-surface-variant mb-3 uppercase tracking-widest">
+            Konu Etiketi (opsiyonel)
+          </p>
+          <p className="text-xs text-on-surface-variant mb-3">
+            PDF hangi konulara aitse seçin — RAG arama o konuda öncelik verir.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(curriculum as any[]).map((c: any) => {
+              const sel = selectedTopicIds.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => toggleTopic(c.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                    sel
+                      ? "border-primary text-primary bg-primary/10"
+                      : "border-white/10 text-on-surface-variant hover:border-white/30"
+                  }`}
+                >
+                  {c.id}. {c.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {files.length > 0 && (

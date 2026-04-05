@@ -84,7 +84,7 @@ export default function DiagnosticPage() {
             Başlangıç bilgi seviyeniz belirlendi. Sistem artık sana özel bir öğrenme yolu oluşturacak.
           </p>
           <button
-            onClick={() => navigate("/student")}
+            onClick={() => navigate("/onboarding")}
             className="w-full py-4 rounded-2xl text-white font-bold gradient-bg shadow-xl text-sm"
           >
             Öğrenmeye Başla →

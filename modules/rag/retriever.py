@@ -13,16 +13,21 @@ from langchain_community.vectorstores import Chroma
 from config.settings import RAGConfig
 
 
-def get_retriever(vector_store: Chroma, top_k: int = None):
+def get_retriever(vector_store: Chroma, top_k: int = None, topic_id: int | None = None):
     """
     ChromaDB üzerinden LangChain retriever nesnesi döndürür.
     Cosine similarity ile en alakalı K dokümanı getirir.
+    topic_id verilirse yalnızca o konuya ait chunk'lar aranır.
     """
     k = top_k or 6  # Daha derin arama için varsayılan 4'ten 6'ya çıkarıldı
 
+    search_kwargs: dict = {"k": k}
+    if topic_id is not None:
+        search_kwargs["filter"] = {"topic_id": {"$eq": topic_id}}
+
     retriever = vector_store.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": k},
+        search_kwargs=search_kwargs,
     )
     return retriever
 

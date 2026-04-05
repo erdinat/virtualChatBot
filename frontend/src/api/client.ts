@@ -115,9 +115,10 @@ export const assessTopicLevel = (topic_id: number, answers: Record<string, numbe
 
 // ── PDFs ──────────────────────────────────────────────────────────────────
 
-export const uploadPdfs = (files: File[]) => {
+export const uploadPdfs = (files: File[], topicIds: number[] = []) => {
   const form = new FormData();
   files.forEach((f) => form.append("files", f));
+  form.append("topic_ids", topicIds.join(","));
   return api.post("/api/pdfs/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
   }).then((r) => r.data);
