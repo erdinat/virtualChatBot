@@ -52,6 +52,70 @@ const TOPICS = [
   "Nesne Yönelimli Programlama (OOP)",
 ];
 
+// Konu bazlı hazır soru önerileri (topic id 1-10 → index 0-9)
+const TOPIC_PROMPTS: Record<number, string[]> = {
+  1: [
+    "Değişken nedir, nasıl tanımlanır?",
+    "int, float, str ve bool arasındaki fark nedir?",
+    "Tip dönüşümü (type casting) nasıl yapılır?",
+    "None nedir, ne zaman kullanılır?",
+  ],
+  2: [
+    "// ve % operatörleri ne işe yarar?",
+    "== ile is arasındaki fark nedir?",
+    "and, or, not nasıl çalışır?",
+    "Karşılaştırma operatörleri nelerdir?",
+  ],
+  3: [
+    "if-elif-else nasıl yazılır?",
+    "İç içe if kullanımını göster",
+    "Tek satırlık (ternary) if nasıl yazılır?",
+    "Bir sayının pozitif mi negatif mi olduğunu nasıl kontrol ederim?",
+  ],
+  4: [
+    "for döngüsü nasıl çalışır?",
+    "while döngüsü ne zaman kullanılır?",
+    "break ve continue ne işe yarar?",
+    "range() fonksiyonunu açıklar mısın?",
+  ],
+  5: [
+    "Liste nasıl oluşturulur ve eleman eklenir?",
+    "append(), remove() ve pop() farkları nelerdir?",
+    "Liste dilimleme (slicing) nasıl yapılır?",
+    "Tuple ile liste arasındaki fark nedir?",
+  ],
+  6: [
+    "Sözlük (dict) nasıl tanımlanır?",
+    "Anahtar-değer çifti nasıl eklenir veya güncellenir?",
+    "Küme (set) nedir, ne zaman kullanılır?",
+    "Sözlükte anahtar var mı nasıl kontrol ederim?",
+  ],
+  7: [
+    "Fonksiyon nasıl tanımlanır?",
+    "Parametre ve argüman arasındaki fark nedir?",
+    "return ne işe yarar?",
+    "Lambda fonksiyonu ne zaman kullanılır?",
+  ],
+  8: [
+    "Dosya nasıl açılır ve okunur?",
+    "with open() neden kullanılır?",
+    "CSV dosyasına nasıl yazılır?",
+    "Dosya modları (r, w, a) ne anlama gelir?",
+  ],
+  9: [
+    "try-except nasıl kullanılır?",
+    "Hata türlerini (ValueError, TypeError vb.) nasıl yakalarım?",
+    "finally bloğu ne işe yarar?",
+    "Kendi hata sınıfımı nasıl oluştururum?",
+  ],
+  10: [
+    "Sınıf (class) nasıl tanımlanır?",
+    "__init__ metodu ne işe yarar?",
+    "Kalıtım (inheritance) nasıl çalışır?",
+    "self nedir, neden kullanılır?",
+  ],
+};
+
 const TOPIC_ICONS = [
   "data_object", "calculate", "account_tree", "loop",
   "view_list", "dataset", "function", "folder_open",
@@ -627,6 +691,28 @@ export default function StudentPage() {
             {/* Input bar */}
             <div className="p-6 md:px-12 md:pb-10"
               style={{ background: "linear-gradient(to top, #0d0a27 60%, transparent)" }}>
+              <div className="max-w-4xl mx-auto">
+                {/* Prompt önerileri — konu seçiliyken ve az mesaj varken göster */}
+                {selectedTopic && messages.length < 3 && !streaming && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {(TOPIC_PROMPTS[selectedTopic.id] ?? []).map((prompt) => (
+                      <button
+                        key={prompt}
+                        onClick={() => { setInput(prompt); setTimeout(() => textareaRef.current?.focus(), 0); }}
+                        className="text-xs px-3 py-1.5 rounded-full border transition-all hover:scale-105 active:scale-95"
+                        style={{
+                          background: "rgba(151,169,255,.07)",
+                          borderColor: "rgba(151,169,255,.22)",
+                          color: "rgba(151,169,255,.85)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="max-w-4xl mx-auto relative group">
                 <div className="absolute -inset-1 rounded-2xl blur opacity-0 group-focus-within:opacity-40 transition-opacity"
                   style={{ background: "linear-gradient(90deg,rgba(151,169,255,.3),rgba(240,147,251,.3),rgba(151,169,255,.3))" }} />

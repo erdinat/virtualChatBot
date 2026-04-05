@@ -6,6 +6,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+
+# .env dosyasını yükle (main.py'den önce bu modül import edildiğinde de çalışsın)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 import yaml
 import bcrypt
 from jose import jwt, JWTError
