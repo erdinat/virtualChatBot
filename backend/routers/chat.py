@@ -14,7 +14,7 @@ from backend.auth import get_current_user
 from backend.schemas import ChatRequest
 from modules.storage import load_student_data, append_chat_log
 from modules.pedagogy.socratic import SocraticManager
-from modules.drl.policy import RuleBasedPolicy
+from modules.drl.policy import get_policy
 from config.settings import CURRICULUM
 
 router = APIRouter()
@@ -251,7 +251,7 @@ def next_topic(user: dict = Depends(get_current_user)):
     """
     data = load_student_data(user["username"])
     mastery = data["student_mastery"]
-    policy = RuleBasedPolicy()
+    policy = get_policy()
     suggestion = policy.select_next_topic(mastery)
 
     # Önerilen konu için ara değerlendirme gerekli mi?

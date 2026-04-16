@@ -2,11 +2,13 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# package.json önce kopyala — src değişse bile npm install cache'ten gelir
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 
 EXPOSE 5173
 
+# --host 0.0.0.0 : container dışından (host makineden) erişim için gerekli
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
