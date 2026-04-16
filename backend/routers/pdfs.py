@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 
 from backend.auth import require_teacher
 from backend.schemas import UploadResponse
-from backend.routers.chat import _rag_chain_cache
+from backend.routers.chat import _rag_chain_cache, invalidate_chains
 
 router = APIRouter()
 
@@ -48,7 +48,7 @@ async def upload_pdfs(
     try:
         from modules.rag import (
             load_single_pdf, split_documents,
-            get_embedding_model, create_vector_store, load_vector_store, build_rag_chain,
+            get_embedding_model, create_vector_store, load_vector_store,
         )
         from modules.rag.pdf_loader import tag_documents_with_topic
 
@@ -70,8 +70,8 @@ async def upload_pdfs(
         else:
             vs.add_documents(chunks)
 
-        _rag_chain_cache["chain"] = build_rag_chain(vector_store=vs)
         _rag_chain_cache["vector_store"] = vs
+        invalidate_chains()  # Eski zincirler stale — yeniden oluşturulsun
 
         return UploadResponse(
             message="PDF'ler başarıyla işlendi",
@@ -85,4 +85,4 @@ async def upload_pdfs(
 @router.get("/status")
 def pdf_status():
     """RAG zincirinin yüklenip yüklenmediğini döner."""
-    return {"loaded": _rag_chain_cache["chain"] is not None}
+    return {"loaded": _rag_chain_cache.get("vector_store") is not None}

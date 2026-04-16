@@ -68,6 +68,25 @@ class LogEntry(BaseModel):
     content: str
 
 
+# ── Diagnostic ───────────────────────────────────────────────────────────────
+
+class DiagnosticSubmitRequest(BaseModel):
+    """POST /api/diagnostic/submit — sınav cevapları (topic_id str → seçilen şık harfi)."""
+    answers: Dict[str, str] = Field(
+        ...,
+        description="topic_id (str) → seçilen şık ('A'|'B'|'C'|'D')",
+    )
+
+
+class TopicLevelRequest(BaseModel):
+    """POST /api/diagnostic/topic-level — konu ön testi cevapları."""
+    topic_id: int = Field(..., ge=1, le=10)
+    answers: Dict[str, int] = Field(
+        ...,
+        description="soru_idx (str) → seçilen option indeksi (0–3)",
+    )
+
+
 # ── PDFs ─────────────────────────────────────────────────────────────────────
 
 class UploadResponse(BaseModel):

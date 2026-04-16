@@ -3,7 +3,7 @@
 import json
 import logging
 import asyncio
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,23 @@ from config.settings import CURRICULUM
 
 router = APIRouter()
 
-# Basit in-memory cache (production'da Redis kullanılabilir)
+# Sokratik yöneticiler — kullanıcı başına (process-wide, session-isolated değil)
 _socratic_managers: dict[str, SocraticManager] = {}
-_rag_chain_cache: dict = {"chain": None, "vector_store": None}
+
+# Vector store — paylaşılan, kullanıcı verisi içermez
+# pdfs.py bu dict'i doğrudan import eder; yapı korunmalı
+_rag_chain_cache: dict = {"vector_store": None}
+
+# RAG zincirleri — (username, topic_id) başına ayrı bellek
+# Böylece farklı kullanıcıların konuşma geçmişleri birbirine karışmaz
+_chain_cache: dict[tuple[str, int | None], Any] = {}
+
+
+def invalidate_chains() -> None:
+    """Yeni PDF yüklendiğinde tüm zincir cache'lerini temizler.
+    pdfs.py tarafından çağrılır.
+    """
+    _chain_cache.clear()
 
 # Konu bazlı seviye prompt'ları — ön test sonrası chat'te kullanılır
 _LEVEL_PROMPT: dict[str, str] = {
@@ -76,17 +90,39 @@ def _is_simplify(text: str) -> bool:
     return any(p in t for p in _SIMPLIFY_PHRASES)
 
 
-def _get_rag_chain():
-    if _rag_chain_cache["chain"] is None:
+def _get_rag_chain(username: str, topic_id: int | None = None):
+    """(username, topic_id) anahtarıyla zincirleri önbelleğe alır.
+
+    Her kullanıcı-konu çifti kendi ConversationBufferWindowMemory'sine sahip olur;
+    farklı kullanıcıların geçmişleri birbirine karışmaz.
+    """
+    key = (username, topic_id)
+    if key in _chain_cache:
+        return _chain_cache[key]
+
+    # Vector store'u yükle (henüz yüklenmemişse)
+    vs = _rag_chain_cache.get("vector_store")
+    if vs is None:
         try:
-            from modules.rag import load_vector_store, build_rag_chain
+            from modules.rag import load_vector_store
             vs = load_vector_store()
             if vs:
-                _rag_chain_cache["chain"] = build_rag_chain(vector_store=vs)
                 _rag_chain_cache["vector_store"] = vs
         except Exception as e:
-            logger.error("RAG chain yüklenemedi: %s", e)
-    return _rag_chain_cache["chain"]
+            logger.error("Vector store yüklenemedi: %s", e)
+            return None
+
+    if vs is None:
+        return None
+
+    try:
+        from modules.rag.chain import build_rag_chain
+        chain = build_rag_chain(vector_store=vs, topic_id=topic_id)
+        _chain_cache[key] = chain
+        return chain
+    except Exception as e:
+        logger.error("RAG chain oluşturulamadı (user=%s, topic=%s): %s", username, topic_id, e)
+        return None
 
 
 async def _stream_response(text: str) -> AsyncGenerator[str, None]:
@@ -170,19 +206,13 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
 
         suffix = f"{socratic_suffix}\n{level_ctx}".strip()
 
-    chain = _get_rag_chain()
-
     async def generate():
         try:
+            # Her (username, topic_id) çifti için ayrı zincir — cross-user memory yok
+            chain = _get_rag_chain(username, topic_id)
             if chain:
                 from modules.rag import ask as rag_ask
-                from modules.rag.chain import build_rag_chain
-                vs = _rag_chain_cache.get("vector_store")
-                active_chain = (
-                    build_rag_chain(vector_store=vs, topic_id=topic_id)
-                    if topic_id and vs else chain
-                )
-                result = rag_ask(active_chain, rag_query, socratic_suffix=suffix)
+                result = rag_ask(chain, rag_query, socratic_suffix=suffix)
                 response_text = result["answer"]
             else:
                 response_text = "📚 Henüz ders notu yüklenmedi. Lütfen öğretmeninize bildirin."

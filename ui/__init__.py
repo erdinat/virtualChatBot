@@ -1,1 +1,0 @@
-"""UI bileşenleri paket modülü."""

@@ -5,12 +5,17 @@ Yeni öğrencinin ilk girişinde bilgi seviyesini belirleyen 10 soruluk sınav.
 Sonuçlara göre DKT başlangıç mastery vektörü hesaplanır.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends
 
 from backend.auth import get_current_user
+from backend.schemas import DiagnosticSubmitRequest, TopicLevelRequest
 from modules.storage import load_student_data, save_student_data
 from config.quiz_questions import get_diagnostic_questions, get_questions_for_topic
 from config.settings import CURRICULUM
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -36,13 +41,13 @@ def get_diagnostic_test(user: dict = Depends(get_current_user)):
 
 
 @router.post("/submit")
-def submit_diagnostic(payload: dict, user: dict = Depends(get_current_user)):
+def submit_diagnostic(payload: DiagnosticSubmitRequest, user: dict = Depends(get_current_user)):
     """
     Sınav cevaplarını alır, başlangıç mastery hesaplar ve kaydeder.
 
     payload: {"answers": {"1": "B", "2": "A", ...}}  (topic_id → seçilen şık)
     """
-    answers: dict = payload.get("answers", {})
+    answers: dict = payload.answers
     reference = get_diagnostic_questions()
 
     # Doğru/yanlış kontrolü
@@ -80,7 +85,7 @@ def submit_diagnostic(payload: dict, user: dict = Depends(get_current_user)):
 
 
 @router.post("/topic-level")
-def assess_topic_level(payload: dict, _user: dict = Depends(get_current_user)):
+def assess_topic_level(payload: TopicLevelRequest, _user: dict = Depends(get_current_user)):
     """
     Konu bazlı ön test cevaplarını değerlendirir, seviye döner.
 
@@ -89,15 +94,16 @@ def assess_topic_level(payload: dict, _user: dict = Depends(get_current_user)):
 
     Returns: {"score": int, "total": int, "level": "beginner"|"intermediate"|"advanced"}
     """
-    topic_id: int = payload.get("topic_id", 0)
-    answers: dict = payload.get("answers", {})
+    topic_id: int = payload.topic_id
+    answers: dict = payload.answers
     questions = get_questions_for_topic(topic_id)
     letters = ["A", "B", "C", "D"]
 
     correct = sum(
         1 for i, q in enumerate(questions)
-        if answers.get(str(i)) is not None
-        and letters[int(answers[str(i)])] == q["answer"].upper()
+        if (opt := answers.get(str(i))) is not None
+        and 0 <= int(opt) < len(letters)
+        and letters[int(opt)] == q["answer"].upper()
     )
     total = len(questions)
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -214,7 +215,7 @@ function ChatBubble({ msg, isLast, onFeedback }: {
       </div>
       <div className="glass-card p-6 rounded-tr-3xl rounded-br-3xl rounded-bl-3xl shadow-2xl">
         <p className="text-on-surface leading-relaxed text-sm whitespace-pre-wrap"
-          dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatMessage(msg.content)) }} />
       </div>
       {isLast && msg.topicId !== null && msg.topicId !== undefined && onFeedback && (
         <div className="flex gap-2">
