@@ -393,26 +393,56 @@ export default function StudentPage() {
     setActiveView("chat");
     setPreTest(null);
 
+    const sessionStartKey = `session_start_${username}_${topicId}`;
+
     if (!forceNew) {
       try {
         const data = await getChatHistory(topicId);
         if (data.messages?.length) {
-          const history: Message[] = data.messages.map((m: { role: "user" | "assistant"; content: string }) => ({
-            id: newId(), role: m.role, content: m.content,
-          }));
-          const divider: Message = {
+          // Always load all history so old conversations remain accessible.
+          // If a new session was started previously, insert a visual divider at that boundary.
+          const sessionStartMs = localStorage.getItem(sessionStartKey);
+          const allMsgs = data.messages as { role: "user" | "assistant"; content: string; timestamp: string }[];
+          const history: Message[] = [];
+          let newSessionDividerAdded = false;
+
+          for (const m of allMsgs) {
+            if (sessionStartMs && !newSessionDividerAdded &&
+                new Date(m.timestamp).getTime() >= parseInt(sessionStartMs)) {
+              history.push({
+                id: newId(), role: "assistant",
+                content: "— Yeni sohbet başladı —",
+              });
+              newSessionDividerAdded = true;
+            }
+            history.push({ id: newId(), role: m.role, content: m.content });
+          }
+
+          history.push({
             id: newId(), role: "assistant",
-            content: `— Önceki sohbetin yüklendi (${data.messages.length} mesaj). Kaldığın yerden devam edebilirsin. —`,
-          };
-          setMessages([...history, divider]);
-          setRecentHistory(data.messages.filter((m: { role: string }) => m.role === "user"));
+            content: `— Sohbet geçmişin yüklendi (${allMsgs.length} mesaj). Kaldığın yerden devam edebilirsin. —`,
+          });
+          setMessages(history);
+          setRecentHistory(allMsgs.filter((m) => m.role === "user"));
           return;
         }
       } catch { /* geçmiş yok veya hata → yeni başlangıç */ }
     }
 
     // Yeni sohbet
-    setRecentHistory([]);
+    if (forceNew) {
+      // Move current user messages to sidebar so old chat stays visible
+      setRecentHistory(
+        messages
+          .filter((m) => m.role === "user")
+          .map((m) => ({ role: m.role, content: m.content }))
+      );
+      // Store session boundary so future history loads insert a visual divider
+      localStorage.setItem(sessionStartKey, Date.now().toString());
+    } else {
+      setRecentHistory([]);
+    }
+
     setMessages([{
       id: newId(),
       role: "assistant",
