@@ -184,7 +184,7 @@ export default function ChatView({
               style={{ maxHeight: "120px", overflowY: "auto" }}
             />
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={onSend} disabled={streaming || !input.trim()}
+              onClick={() => onSend()} disabled={streaming || !input.trim()}
               className="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center shadow-lg disabled:opacity-40 shrink-0"
               style={{ boxShadow: "0 4px 16px rgba(151,169,255,.2)" }}>
               <span className="material-symbols-outlined text-white" style={{ fontSize: "18px", fontVariationSettings: "'FILL' 1" }}>send</span>

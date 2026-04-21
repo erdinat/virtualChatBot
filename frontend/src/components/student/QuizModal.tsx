@@ -1,8 +1,25 @@
 import { motion, AnimatePresence } from "framer-motion";
-import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { sendFeedback } from "../../api/client";
+import DOMPurify from "dompurify";
+import { assessTopicLevel } from "../../api/client";
 import type { QuizModalState } from "./types";
+
+/** Soru metnindeki ```python ... ``` bloklarını ve \n'leri render eder */
+function formatQuestion(text: string): string {
+  const parts = text.split(/(```[\w]*\n?[\s\S]*?```)/g);
+  return parts.map((part) => {
+    const block = part.match(/^```(\w*)\n?([\s\S]*?)```$/);
+    if (block) {
+      const code = block[2].trimEnd()
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `<pre style="background:#0d0b22;border:1px solid rgba(151,169,255,0.18);border-radius:8px;padding:12px 14px;margin:10px 0 4px;overflow-x:auto;white-space:pre;font-family:monospace;font-size:0.8em;line-height:1.75;color:#c8d3ff;text-align:left"><code>${code}</code></pre>`;
+    }
+    return part
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/`([^`]+)`/g, '<code style="background:#2a2653;padding:2px 5px;border-radius:4px;color:#97a9ff;font-family:monospace;font-size:0.85em">$1</code>')
+      .replace(/\n/g, "<br/>");
+  }).join("");
+}
 
 interface PendingTestSuggest {
   topicId: number;
@@ -16,7 +33,7 @@ interface Props {
   onQuizAnswer: (step: number, optionIndex: number) => void;
   onQuizNext: () => void;
   onQuizClose: () => void;
-  onQuizDone: () => void;
+  onQuizDone: (score: number, total: number) => void;
   onPendingAccept: (topicId: number, topicName: string) => void;
   onPendingDismiss: () => void;
 }
@@ -27,6 +44,49 @@ export default function QuizModal({
   onPendingAccept, onPendingDismiss,
 }: Props) {
   const qc = useQueryClient();
+
+  async function handleFinish() {
+    if (!quizModal) return;
+
+    // LLM tarafından üretilen sorular: doğru cevaplar client'ta, yerel değerlendir
+    if (quizModal.correctAnswers) {
+      const correct = quizModal.correctAnswers.reduce((sum, ans, i) => {
+        return sum + (quizModal.answers[i] === ans ? 1 : 0);
+      }, 0);
+      onQuizDone(correct, quizModal.questions.length);
+      return;
+    }
+
+    // Statik sorular: backend değerlendirmesi
+    try {
+      const answersRecord: Record<string, number> = {};
+      quizModal.questions.forEach((_, i) => {
+        if (quizModal.answers[i] !== undefined) {
+          answersRecord[String(i)] = quizModal.answers[i];
+        }
+      });
+      const result = await assessTopicLevel(quizModal.topicId, answersRecord);
+      qc.invalidateQueries({ queryKey: ["mastery"] });
+      qc.invalidateQueries({ queryKey: ["nextTopic"] });
+      onQuizDone(result.score, result.total);
+    } catch {
+      onQuizDone(0, quizModal.questions.length);
+    }
+  }
+
+  const isConceptCheck = quizModal?.mode === "concept-check";
+  const isFinal = quizModal?.mode === "final";
+
+  const passed = quizModal?.score !== undefined && quizModal.total !== undefined
+    ? quizModal.score / quizModal.total >= 2 / 3
+    : false;
+
+  const modeLabel = (mode: QuizModalState["mode"]) => {
+    if (mode === "concept-check") return "Kavrama Sorusu";
+    if (mode === "final")         return "Final Testi";
+    if (mode === "check")         return "Anlama Testi";
+    return "Ara Değerlendirme";
+  };
 
   return (
     <>
@@ -77,7 +137,9 @@ export default function QuizModal({
                   <>
                     <div className="flex items-center justify-between mb-6">
                       <div>
-                        <p className="text-xs uppercase font-bold tracking-widest text-on-surface-variant mb-1">Ara Değerlendirme</p>
+                        <p className="text-xs uppercase font-bold tracking-widest text-on-surface-variant mb-1">
+                          {modeLabel(quizModal.mode)}
+                        </p>
                         <h2 className="text-base font-bold text-on-surface">{quizModal.topicName}</h2>
                       </div>
                       <span className="text-xs font-bold text-primary px-3 py-1 rounded-full"
@@ -91,9 +153,9 @@ export default function QuizModal({
                         style={{ width: `${(quizModal.step / quizModal.questions.length) * 100}%` }} />
                     </div>
 
-                    <p className="text-sm font-medium text-on-surface leading-relaxed mb-6">
-                      {quizModal.questions[quizModal.step].text}
-                    </p>
+                    <div className="text-sm font-medium text-on-surface leading-relaxed mb-6"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatQuestion(quizModal.questions[quizModal.step].text)) }}
+                    />
 
                     <div className="space-y-3">
                       {quizModal.questions[quizModal.step].options.map((opt, i) => {
@@ -122,19 +184,10 @@ export default function QuizModal({
                       disabled={quizModal.answers[quizModal.step] === undefined}
                       onClick={() => {
                         const isLast = quizModal.step === quizModal.questions.length - 1;
-                        if (!isLast) {
-                          onQuizNext();
+                        if (isLast) {
+                          handleFinish();
                         } else {
-                          Promise.all(
-                            Array.from({ length: quizModal.questions.length }, (_, i) =>
-                              sendFeedback(quizModal.topicId, quizModal.answers[i] !== undefined)
-                            )
-                          ).then(() => {
-                            qc.invalidateQueries({ queryKey: ["mastery"] });
-                            qc.invalidateQueries({ queryKey: ["nextTopic"] });
-                          });
-                          onQuizDone();
-                          toast.success("Test tamamlandı! 🎉");
+                          onQuizNext();
                         }
                       }}
                       className="mt-6 w-full py-3 rounded-xl text-sm font-bold text-white gradient-bg disabled:opacity-40 transition-opacity">
@@ -142,20 +195,111 @@ export default function QuizModal({
                     </button>
                   </>
                 ) : (
+                  /* ── Sonuç ekranı ── */
                   <div className="flex flex-col items-center gap-6 py-4">
-                    <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center shadow-xl">
-                      <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    </div>
-                    <div className="text-center">
-                      <h2 className="text-xl font-bold text-on-surface mb-2">Tebrikler!</h2>
-                      <p className="text-sm text-on-surface-variant">
-                        <strong className="text-primary">{quizModal.topicName}</strong> ara değerlendirmesini tamamladın.
-                      </p>
-                    </div>
-                    <button onClick={onQuizClose}
-                      className="px-8 py-3 rounded-xl text-sm font-bold text-white gradient-bg shadow-lg">
-                      Devam Et
-                    </button>
+
+                    {/* Concept-check done screen */}
+                    {isConceptCheck && (
+                      <>
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-xl"
+                          style={{ background: passed ? "linear-gradient(135deg,#34d399,#059669)" : "linear-gradient(135deg,#f87171,#dc2626)" }}>
+                          <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            {passed ? "check_circle" : "close"}
+                          </span>
+                        </div>
+                        <div className="text-center">
+                          <h2 className="text-xl font-bold text-on-surface mb-2">
+                            {passed ? "Doğru! 🎉" : "Yanlış 🤔"}
+                          </h2>
+                          <p className="text-sm text-on-surface-variant">
+                            {passed
+                              ? "Kavramı anladığın belli, devam edelim!"
+                              : "Konuyu biraz daha açıklayalım."}
+                          </p>
+                        </div>
+                        <button onClick={onQuizClose}
+                          className="px-8 py-3 rounded-xl text-sm font-bold text-white gradient-bg shadow-lg">
+                          {passed ? "Devam Et →" : "Yeniden Açıkla"}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Final test done screen */}
+                    {isFinal && (
+                      <>
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-xl"
+                          style={{ background: passed ? "linear-gradient(135deg,#fbbf24,#d97706)" : "linear-gradient(135deg,#f87171,#dc2626)" }}>
+                          <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            {passed ? "emoji_events" : "replay"}
+                          </span>
+                        </div>
+                        <div className="text-center">
+                          <h2 className="text-xl font-bold text-on-surface mb-2">
+                            {passed ? "Konuyu Tamamladın! 🏆" : "Biraz daha çalışalım 💪"}
+                          </h2>
+                          <p className="text-sm text-on-surface-variant mb-1">
+                            <strong className="text-primary">{quizModal.topicName}</strong>
+                          </p>
+                          {quizModal.score !== undefined && quizModal.total !== undefined && (
+                            <p className="text-2xl font-bold mt-3" style={{ color: passed ? "#fbbf24" : "#f87171" }}>
+                              {quizModal.score} / {quizModal.total} doğru
+                            </p>
+                          )}
+                          {passed && (
+                            <p className="text-xs mt-3 px-4 py-2 rounded-lg leading-relaxed"
+                              style={{ background: "rgba(167,139,250,.12)", color: "rgba(167,139,250,.9)" }}>
+                              {(quizModal.score ?? 0) === (quizModal.total ?? 3)
+                                ? "Mükemmel! Bir sonraki konu orta seviyeden başlayacak 🚀"
+                                : "İyi iş! Bir sonraki konu başlangıç seviyesinden başlayacak 📚"}
+                            </p>
+                          )}
+                          {!passed && (
+                            <p className="text-xs text-on-surface-variant mt-2">
+                              Konuyu biraz daha pekiştirmen gerekiyor.
+                            </p>
+                          )}
+                        </div>
+                        <button onClick={onQuizClose}
+                          className="px-8 py-3 rounded-xl text-sm font-bold text-white gradient-bg shadow-lg">
+                          {passed ? "Sonraki Konuya Geç →" : "Tekrar Çalış"}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Check / review done screen */}
+                    {!isConceptCheck && !isFinal && (
+                      <>
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-xl"
+                          style={{ background: passed ? "linear-gradient(135deg,#34d399,#059669)" : "linear-gradient(135deg,#f87171,#dc2626)" }}>
+                          <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            {passed ? "check_circle" : "replay"}
+                          </span>
+                        </div>
+                        <div className="text-center">
+                          <h2 className="text-xl font-bold text-on-surface mb-2">
+                            {passed ? "Harika! 🎉" : "Biraz daha çalışalım 💪"}
+                          </h2>
+                          <p className="text-sm text-on-surface-variant mb-1">
+                            <strong className="text-primary">{quizModal.topicName}</strong>
+                          </p>
+                          {quizModal.score !== undefined && quizModal.total !== undefined && (
+                            <p className="text-2xl font-bold mt-3" style={{ color: passed ? "#34d399" : "#f87171" }}>
+                              {quizModal.score} / {quizModal.total} doğru
+                            </p>
+                          )}
+                          <p className="text-xs text-on-surface-variant mt-2">
+                            {passed
+                              ? "Bir sonraki seviyeye geçmeye hazırsın!"
+                              : "Konuyu biraz daha pekiştirmen gerekiyor."}
+                          </p>
+                        </div>
+                        <button onClick={onQuizClose}
+                          className="px-8 py-3 rounded-xl text-sm font-bold text-white gradient-bg shadow-lg">
+                          {passed ? "Devam Et →" : "Tekrar Çalış"}
+                        </button>
+                      </>
+                    )}
+
                   </div>
                 )}
               </div>

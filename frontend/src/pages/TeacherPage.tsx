@@ -9,7 +9,11 @@ type Tab = "analytics" | "logs" | "curriculum";
 
 /* ── Student Analytics Tab ───────────────────────────────── */
 function AnalyticsTab() {
-  const { data: students = [], isLoading: studentsLoading } = useQuery({ queryKey: ["students"], queryFn: getStudents });
+  const { data: students = [], isLoading: studentsLoading } = useQuery({
+    queryKey: ["students"],
+    queryFn: getStudents,
+    refetchInterval: 30000, // 30 saniyede bir otomatik güncelle
+  });
   const { data: curriculum = [] } = useQuery({ queryKey: ["curriculum"], queryFn: getCurriculum });
   const [search, setSearch] = useState("");
 

@@ -37,10 +37,10 @@ def _load_model_if_exists() -> Optional[DKTModel]:
         model.load_state_dict(torch.load(path, weights_only=True))
         model.eval()
         _cached_model = model
-        print(f"✅ DKT LSTM modeli yüklendi: {path}")
+        logger.info("DKT LSTM modeli yüklendi: %s", path)
         return model
     except Exception as e:
-        print(f"⚠️  DKT modeli yüklenemedi ({e}), kural tabanlı fallback kullanılıyor.")
+        logger.warning("DKT modeli yüklenemedi (%s), kural tabanlı fallback kullanılıyor.", e)
         return None
 
 

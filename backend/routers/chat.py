@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from backend.auth import get_current_user
-from backend.schemas import ChatRequest
+from backend.schemas import ChatRequest, GenerateQuizRequest
 from modules.storage import load_student_data, append_chat_log
 from modules.pedagogy.socratic import SocraticManager
 from modules.drl.policy import get_policy
@@ -206,13 +206,30 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
 
         suffix = f"{socratic_suffix}\n{level_ctx}".strip()
 
+    # Frontend'den gelen geçmişi (human, ai) tuple listesine dönüştür.
+    # Son 4 çiftle sınırla (CONDENSE adımı için yeterli bağlam; daha fazlası gürültü katar).
+    def _build_langchain_history():
+        pairs: list[tuple[str, str]] = []
+        msgs = [m for m in req.chat_history if m.role in ("user", "assistant")]
+        # Çift sayısını garantilemek için user→assistant sırasını zorla
+        i = 0
+        while i < len(msgs) - 1:
+            if msgs[i].role == "user" and msgs[i + 1].role == "assistant":
+                pairs.append((msgs[i].content, msgs[i + 1].content))
+                i += 2
+            else:
+                i += 1
+        return pairs[-4:]  # son 4 çift (8 mesaj)
+
+    lc_history = _build_langchain_history()
+
     async def generate():
         try:
             # Her (username, topic_id) çifti için ayrı zincir — cross-user memory yok
             chain = _get_rag_chain(username, topic_id)
             if chain:
                 from modules.rag import ask as rag_ask
-                result = rag_ask(chain, rag_query, socratic_suffix=suffix)
+                result = rag_ask(chain, rag_query, socratic_suffix=suffix, chat_history=lc_history)
                 response_text = result["answer"]
             else:
                 response_text = "📚 Henüz ders notu yüklenmedi. Lütfen öğretmeninize bildirin."
@@ -273,3 +290,111 @@ def get_quiz(topic_id: int, _user: dict = Depends(get_current_user)):
         for q in questions
     ]
     return {"questions": safe}
+
+
+@router.post("/generate-quiz")
+async def generate_quiz(payload: GenerateQuizRequest, _user: dict = Depends(get_current_user)):
+    """
+    LLM ile mevcut konuya, seviyeye ve sohbet bağlamına özel 3 soru üretir.
+    Yanıt: {"questions": [{topic_id, text, options}], "correct": [int, int, int]}
+    Başarısız olursa statik sorulara düşer (fallback).
+    """
+    from config.settings import LLMConfig
+
+    topic_name = next((t["name"] for t in CURRICULUM if t["id"] == payload.topic_id), "Python")
+
+    level_rules = {
+        "beginner": (
+            "BAŞLANGIÇ SEVİYESİ KURALLARI:\n"
+            "- Kesinlikle kod bloğu kullanma, sadece kavramsal sorular sor.\n"
+            "- Örnek soru tipleri: 'X nedir?', 'Hangi veri tipi ... saklar?', 'Aşağıdakilerden hangisi doğrudur?'\n"
+            "- Basit, kısa, anlaşılır Türkçe cümleler kullan.\n"
+            "- is/==, __dunder__, decorator gibi ileri kavramlara girme."
+        ),
+        "intermediate": (
+            "ORTA SEVİYE KURALLARI:\n"
+            "- Maksimum 2-3 satır, çok basit kod parçaları kullanabilirsin.\n"
+            "- Kod içeriyorsa ```python\\n...\\n``` formatıyla yaz, her satır ayrı satırda olsun.\n"
+            "- Örnek: print(len([1,2,3])) → çıktısı ne olur?\n"
+            "- is/==, mutable/immutable gibi orta seviye kavramları test edebilirsin."
+        ),
+        "advanced": (
+            "İLERİ SEVİYE KURALLARI:\n"
+            "- Karmaşık kod parçaları, edge-case'ler, Pythonic kalıplar kullanabilirsin.\n"
+            "- Kod içeriyorsa ```python\\n...\\n``` formatıyla yaz.\n"
+            "- decorator, generator, comprehension, *args/**kwargs gibi ileri kavramlar uygun."
+        ),
+    }.get(payload.level, "")
+
+    # Son sohbetten bağlam — ilgisiz divider mesajlarını atla
+    recent = [m for m in payload.chat_history[-8:] if m.role in ("user", "assistant")]
+    context = "\n".join(f"{m.role.upper()}: {m.content[:250]}" for m in recent) or "(Sohbet yeni başladı)"
+
+    prompt = f"""Sen bir Python eğitim uzmanısın. Öğrenciye kavrama testi soruları üretiyorsun.
+
+Konu: {topic_name}
+Seviye: {payload.level}
+
+{level_rules}
+
+Son sohbet bağlamı (sorular bununla ilgili olsun):
+{context}
+
+Görev: Yukarıdaki konuya ve seviyeye uygun TAM OLARAK 3 adet çoktan seçmeli soru üret.
+- SADECE "{topic_name}" konusundan soru sor.
+- Her soru 4 şık (A-D), tek doğru cevap.
+- Türkçe yaz. Şıklar kısa ve net olsun (max 1 satır).
+
+SADECE geçerli JSON döndür, başka hiçbir şey yazma:
+[
+  {{"text": "soru metni (kod varsa ```python\\nkod\\n``` formatında)", "options": ["şık A", "şık B", "şık C", "şık D"], "correct": 0}},
+  {{"text": "soru metni", "options": ["şık A", "şık B", "şık C", "şık D"], "correct": 2}},
+  {{"text": "soru metni", "options": ["şık A", "şık B", "şık C", "şık D"], "correct": 1}}
+]
+correct = doğru şık indeksi (0=A, 1=B, 2=C, 3=D)"""
+
+    def _fallback():
+        from config.quiz_questions import get_questions_for_topic
+        letters = ["A", "B", "C", "D"]
+        qs = get_questions_for_topic(payload.topic_id)
+        return {
+            "questions": [{"topic_id": payload.topic_id, "text": q["text"], "options": q["options"]} for q in qs],
+            "correct":   [letters.index(q["answer"].upper()) for q in qs],
+        }
+
+    try:
+        from langchain_openai import ChatOpenAI
+        from langchain_core.messages import HumanMessage
+
+        llm = ChatOpenAI(
+            api_key=LLMConfig.API_KEY,
+            base_url=LLMConfig.BASE_URL,
+            model=LLMConfig.MODEL_NAME,
+            temperature=0.7,
+            max_tokens=900,
+        )
+        result = await llm.ainvoke([HumanMessage(content=prompt)])
+        raw = result.content.strip()
+
+        # Markdown kod bloğu varsa temizle
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            raw = parts[1] if len(parts) > 1 else raw
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        data = json.loads(raw)
+        if not isinstance(data, list) or len(data) < 3:
+            raise ValueError("Beklenen 3 soruluk liste gelmedi")
+
+        questions = [
+            {"topic_id": payload.topic_id, "text": q["text"], "options": q["options"]}
+            for q in data[:3]
+        ]
+        correct = [int(q["correct"]) for q in data[:3]]
+        return {"questions": questions, "correct": correct}
+
+    except Exception as e:
+        logger.warning("Quiz üretimi başarısız, statik sorulara düşülüyor (topic=%s): %s", payload.topic_id, e)
+        return _fallback()

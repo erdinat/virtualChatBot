@@ -20,9 +20,20 @@ export interface QuizModalState {
   topicId: number;
   topicName: string;
   questions: { topic_id: number; text: string; options: string[] }[];
+  /** LLM tarafından üretilen sorularda doğru cevap indeksleri (0-3). Varsa yerel değerlendirme yapılır. */
+  correctAnswers?: number[];
   answers: Record<number, number>;
   step: number;
   done: boolean;
+  /**
+   * concept-check : 👍 Anladım sonrası 3 soruluk kavrama testi (LLM üretir)
+   * check         : hakimiyet %100 olunca açılan seviye atlama testi
+   * final         : ileri seviyeyi geçince konu final testi
+   * review        : DRL öneri balonu
+   */
+  mode: "concept-check" | "check" | "final" | "review";
+  score?: number;
+  total?: number;
 }
 
 export const LEVEL_META: Record<TopicLevel, { label: string; color: string; bg: string }> = {
@@ -63,8 +74,17 @@ export const TOPIC_PROMPTS: Record<number, string[]> = {
   10: ["Sınıf (class) nasıl tanımlanır?", "__init__ metodu ne işe yarar?", "Kalıtım (inheritance) nasıl çalışır?", "self nedir, neden kullanılır?"],
 };
 
-export function masteryBadge(score: number): { label: string; color: string } {
-  if (score >= 0.7) return { label: "Hakimiyet", color: "#34d399" };
+/** Konu N için kilitli kalması gereken ön koşul konu ID'si (N-1 çalışılmadan N açılmaz). */
+export const TOPIC_PREREQUISITES: Record<number, number> = {
+  2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9,
+};
+
+export function masteryBadge(
+  score: number,
+  mastered = false,
+): { label: string; color: string } {
+  if (mastered)    return { label: "Tamamlandı", color: "#a78bfa" };
+  if (score >= 0.7) return { label: "Hakimiyet",  color: "#34d399" };
   if (score > 0)   return { label: "Devam Ediyor", color: "#60a5fa" };
   return { label: "Başlanmadı", color: "rgba(255,255,255,.3)" };
 }

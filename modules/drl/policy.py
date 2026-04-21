@@ -31,39 +31,41 @@ class RuleBasedPolicy:
         """
         Öğrencinin bilgi seviyesine göre sonraki konuyu seçer.
 
+        Müfredat sırasına (ID) göre ilerler: önce 1'i tamamla, sonra 2, sonra 3...
+        Difficulty sıralaması kullanılmaz — pedagojik olarak yanlış önerilere yol açar.
+
         Args:
             mastery: {"Konu Adı": P(correct), ...}
 
         Returns:
             {"action": "review"|"advance", "topic": {...}, "reason": str}
         """
-        # Konuları zorluk sırasına göre sırala
-        sorted_topics = sorted(CURRICULUM, key=lambda t: t["difficulty"])
+        # Müfredat sırasına göre (ID ascending) tara
+        sorted_topics = sorted(CURRICULUM, key=lambda t: t["id"])
 
         for topic in sorted_topics:
             topic_name = topic["name"]
-            score = mastery.get(topic_name, 0.5)
+            score = mastery.get(topic_name, 0.0)
 
             if score < self.mastery_threshold:
                 return {
                     "action": "review",
                     "topic": topic,
-                    "reason": f"'{topic_name}' konusunda bilgi seviyeniz düşük "
-                              f"({score:.0%}). Bu konuyu tekrar etmenizi öneriyorum.",
+                    "reason": f"'{topic_name}' konusunu çalışmaya devam et "
+                              f"(hakimiyet: {score:.0%}).",
                 }
 
         # Tüm konularda yetkinse
         return {
             "action": "advance",
             "topic": sorted_topics[-1],
-            "reason": "Tebrikler! Tüm konularda yeterli seviyedesiniz. "
-                      "İleri düzey alıştırmalara geçebilirsiniz.",
+            "reason": "Tebrikler! Tüm konuları tamamladın.",
         }
 
     def should_test(self, mastery: Dict[str, float], current_topic_name: str) -> bool:
         """Mevcut konu için ara sınav yapılmalı mı?"""
-        score = mastery.get(current_topic_name, 0.5)
-        # Seviye 0.4-0.7 arasındaysa test yap (çok düşükse önce anlat)
+        score = mastery.get(current_topic_name, 0.0)
+        # Seviye 0.4-0.7 arasındaysa test öner (çok düşükse önce anlat)
         return 0.4 <= score < self.mastery_threshold
 
     def get_difficulty_level(self, mastery: Dict[str, float]) -> str:

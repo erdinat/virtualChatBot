@@ -56,9 +56,11 @@ def submit_diagnostic(payload: DiagnosticSubmitRequest, user: dict = Depends(get
         tid = q["topic_id"]
         topic_correct[tid] = answers.get(str(tid), "").upper() == q["answer"].upper()
 
-    # Doğru → 0.55 başlangıç mastery, yanlış → 0.15
+    # Doğru → 0.55 başlangıç mastery, yanlış → 0.0
+    # Yanlış cevap "hiç bilmiyor" demek; öğrenci o konuyu görünce sıfırdan başlamalı.
+    # 0.15 yerine 0.0 kullanmak öğretmen ekranıyla öğrenci ekranını tutarlı tutar.
     initial_mastery = {
-        topic["name"]: (0.55 if topic_correct.get(topic["id"], False) else 0.15)
+        topic["name"]: (0.55 if topic_correct.get(topic["id"], False) else 0.0)
         for topic in CURRICULUM
     }
 
@@ -107,9 +109,12 @@ def assess_topic_level(payload: TopicLevelRequest, _user: dict = Depends(get_cur
     )
     total = len(questions)
 
+    # 3 soruluk test için: 3/3 → advanced, 2/3 → intermediate, 0-1/3 → beginner
+    # Genel kural: tam puan → advanced, ≥ ⌈total*2/3⌉ → intermediate, geri kalan → beginner
+    intermediate_threshold = (total * 2 + 2) // 3  # ⌈total * 2/3⌉ (tamsayı yukarı yuvarlama)
     if correct == total:
         level = "advanced"
-    elif correct >= max(1, total // 2):
+    elif correct >= intermediate_threshold:
         level = "intermediate"
     else:
         level = "beginner"

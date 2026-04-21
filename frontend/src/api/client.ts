@@ -1,7 +1,10 @@
 import axios from "axios";
+import { useAuthStore } from "../store/authStore";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export const api = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -12,12 +15,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// 401 → logout
+// 401 → logout (hem localStorage hem Zustand temizlenmeli, yoksa sonsuz yönlendirme döngüsü olur)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem("access_token");
+      useAuthStore.getState().logout();
       window.location.href = "/";
     }
     return Promise.reject(err);
@@ -57,7 +60,7 @@ export const askQuestion = (
   const token = localStorage.getItem("access_token");
 
   // SSE fetch (axios SSE'yi desteklemiyor)
-  fetch("http://localhost:8000/api/chat/ask", {
+  fetch(`${API_BASE}/api/chat/ask`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -103,6 +106,13 @@ export const getCurriculum = () => api.get("/api/teacher/curriculum").then((r) =
 
 export const getQuiz = (topic_id: number) =>
   api.get(`/api/chat/quiz/${topic_id}`).then((r) => r.data);
+
+/** LLM ile seviye + sohbet bağlamına özel 3 soru üretir. Döner: {questions, correct: number[]} */
+export const generateQuiz = (
+  topic_id: number,
+  level: string,
+  chat_history: { role: string; content: string }[],
+) => api.post("/api/chat/generate-quiz", { topic_id, level, chat_history }).then((r) => r.data);
 
 export const getDiagnosticQuestions = () =>
   api.get("/api/diagnostic/questions").then((r) => r.data);

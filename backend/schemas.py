@@ -87,6 +87,15 @@ class TopicLevelRequest(BaseModel):
     )
 
 
+# ── Quiz Generation ──────────────────────────────────────────────────────────
+
+class GenerateQuizRequest(BaseModel):
+    """POST /api/chat/generate-quiz — LLM ile seviye ve sohbet bağlamına özel soru üretir."""
+    topic_id: int = Field(..., ge=1, le=10)
+    level: Literal["beginner", "intermediate", "advanced"]
+    chat_history: List[ChatMessage] = Field(default=[], max_length=50)
+
+
 # ── PDFs ─────────────────────────────────────────────────────────────────────
 
 class UploadResponse(BaseModel):

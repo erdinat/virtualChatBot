@@ -1,6 +1,23 @@
 import { motion, AnimatePresence } from "framer-motion";
+import DOMPurify from "dompurify";
 import type { PreTestState, TopicLevel } from "./types";
 import { LEVEL_META } from "./types";
+
+function formatQuestion(text: string): string {
+  const parts = text.split(/(```[\w]*\n?[\s\S]*?```)/g);
+  return parts.map((part) => {
+    const block = part.match(/^```(\w*)\n?([\s\S]*?)```$/);
+    if (block) {
+      const code = block[2].trimEnd()
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `<pre style="background:#0d0b22;border:1px solid rgba(151,169,255,0.18);border-radius:8px;padding:12px 14px;margin:10px 0 4px;overflow-x:auto;white-space:pre;font-family:monospace;font-size:0.8em;line-height:1.75;color:#c8d3ff;text-align:left"><code>${code}</code></pre>`;
+    }
+    return part
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/`([^`]+)`/g, '<code style="background:#2a2653;padding:2px 5px;border-radius:4px;color:#97a9ff;font-family:monospace;font-size:0.85em">$1</code>')
+      .replace(/\n/g, "<br/>");
+  }).join("");
+}
 
 interface Props {
   preTest: PreTestState | null;
@@ -77,9 +94,9 @@ export default function PreTestModal({ preTest, onClose, onAnswer, onNext, onSub
                       style={{ width: `${(preTest.step / preTest.questions.length) * 100}%` }} />
                   </div>
 
-                  <p className="text-sm font-medium text-on-surface leading-relaxed mb-6">
-                    {preTest.questions[preTest.step].text}
-                  </p>
+                  <div className="text-sm font-medium text-on-surface leading-relaxed mb-6"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatQuestion(preTest.questions[preTest.step].text)) }}
+                  />
 
                   <div className="space-y-3">
                     {preTest.questions[preTest.step].options.map((opt, i) => {
