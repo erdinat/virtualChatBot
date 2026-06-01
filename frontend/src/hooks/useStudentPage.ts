@@ -11,10 +11,11 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../store/authStore";
 import {
   getMyMastery, getNextTopic, askQuestion, sendFeedback,
-  getQuiz, generateQuiz, assessTopicLevel, getChatHistory,
+  getQuiz, getPretest, generateQuiz, assessTopicLevel, getChatHistory,
 } from "../api/client";
 import type { TopicLevel, Message, PreTestState, QuizModalState } from "../components/student/types";
 import { LEVEL_META, TOPICS, TOPIC_PREREQUISITES, newId } from "../components/student/types";
+import { safeGet, safeSet, safeGetInt } from "../utils/safeStorage";
 
 export function useStudentPage() {
   const { name, username, logout } = useAuthStore();
@@ -51,7 +52,7 @@ export function useStudentPage() {
   const [masteredTopics, setMasteredTopics] = useState<Set<number>>(() => {
     const set = new Set<number>();
     for (let i = 1; i <= 10; i++) {
-      if (localStorage.getItem(`topic_mastered_${username}_${i}`) === "1") set.add(i);
+      if (safeGet(`topic_mastered_${username}_${i}`) === "1") set.add(i);
     }
     return set;
   });
@@ -60,7 +61,7 @@ export function useStudentPage() {
   const [studiedTopics, setStudiedTopics] = useState<Set<number>>(() => {
     const set = new Set<number>();
     for (let i = 1; i <= 10; i++) {
-      if (localStorage.getItem(`topic_studied_${username}_${i}`) === "1") set.add(i);
+      if (safeGet(`topic_studied_${username}_${i}`) === "1") set.add(i);
     }
     return set;
   });
@@ -71,12 +72,12 @@ export function useStudentPage() {
   useEffect(() => {
     if (!selectedTopic || !username) { setLevelProgress(0); return; }
     const key = `level_progress_${username}_${selectedTopic.id}_${selectedTopic.level}`;
-    setLevelProgress(parseInt(localStorage.getItem(key) ?? "0"));
+    setLevelProgress(safeGetInt(key, 0));
   }, [selectedTopic?.id, selectedTopic?.level, username]);
 
   function writeLevelProgress(topicId: number, level: string, value: number): number {
     const clamped = Math.min(Math.max(value, 0), 100);
-    localStorage.setItem(`level_progress_${username}_${topicId}_${level}`, String(clamped));
+    safeSet(`level_progress_${username}_${topicId}_${level}`, String(clamped));
     setLevelProgress(clamped);
     return clamped;
   }
@@ -123,7 +124,7 @@ export function useStudentPage() {
     const topicId = Number(topicIdStr);
     if (masteredTopics.has(prereqId)) continue;
     const prereqKey = `level_progress_${username}_${prereqId}_intermediate`;
-    const prereqIntermediatePct = parseInt(localStorage.getItem(prereqKey) ?? "0");
+    const prereqIntermediatePct = safeGetInt(prereqKey, 0);
     if (prereqIntermediatePct < 50) lockedTopics.add(topicId);
   }
 
@@ -138,7 +139,9 @@ export function useStudentPage() {
     const abortController = new AbortController();
     sseAbortRef.current = abortController;
 
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    const history = messages
+      .filter((m) => !m.content.startsWith("—"))   // divider mesajları hariç tut
+      .map((m) => ({ role: m.role, content: m.content }));
     const assistantId = newId();
     setMessages((prev) => [
       ...prev,
@@ -188,10 +191,11 @@ export function useStudentPage() {
   // ── Topic entry flow ───────────────────────────────────────────────────
 
   async function openPreTest(topicId: number, topicName: string) {
-    const cached = localStorage.getItem(`topic_level_${username}_${topicId}`) as TopicLevel | null;
+    const cached = safeGet(`topic_level_${username}_${topicId}`) as TopicLevel | null;
     if (cached) { startChat(topicId, topicName, cached); return; }
     try {
-      const data = await getQuiz(topicId);
+      // Ön test 10 soruluk kademeli zorluk seti (4 kolay + 3 orta + 3 zor)
+      const data = await getPretest(topicId);
       if (data.questions?.length) {
         setPreTest({ topicId, topicName, questions: data.questions, answers: {}, step: 0, result: null });
       }
@@ -213,18 +217,18 @@ export function useStudentPage() {
     sseAbortRef.current = null;
     setStreaming(false);
 
-    localStorage.setItem(`topic_level_${username}_${topicId}`, level);
+    safeSet(`topic_level_${username}_${topicId}`, level);
     setSelectedTopic({ id: topicId, name: topicName, level });
     setActiveView("chat");
     setPreTest(null);
 
-    localStorage.setItem(`topic_studied_${username}_${topicId}`, "1");
+    safeSet(`topic_studied_${username}_${topicId}`, "1");
     setStudiedTopics((prev) => new Set([...prev, topicId]));
 
     const progressKey = `level_progress_${username}_${topicId}_${level}`;
-    if (!localStorage.getItem(progressKey)) {
+    if (!safeGet(progressKey)) {
       const dktPct = Math.round((masteryMap[topicName] ?? 0) * 100);
-      localStorage.setItem(progressKey, String(dktPct));
+      safeSet(progressKey, String(dktPct));
       setLevelProgress(dktPct);
     }
 
@@ -234,13 +238,13 @@ export function useStudentPage() {
       try {
         const data = await getChatHistory(topicId);
         if (data.messages?.length) {
-          const sessionStartMs = localStorage.getItem(sessionStartKey);
+          const sessionStartMs = safeGetInt(sessionStartKey, 0);
           const allMsgs = data.messages as { role: "user" | "assistant"; content: string; timestamp: string }[];
           const history: Message[] = [];
           let dividerAdded = false;
           for (const m of allMsgs) {
-            if (sessionStartMs && !dividerAdded &&
-                new Date(m.timestamp).getTime() >= parseInt(sessionStartMs)) {
+            if (sessionStartMs > 0 && !dividerAdded &&
+                new Date(m.timestamp).getTime() >= sessionStartMs) {
               history.push({ id: newId(), role: "assistant", content: "— Yeni sohbet başladı —" });
               dividerAdded = true;
             }
@@ -259,7 +263,7 @@ export function useStudentPage() {
 
     if (forceNew) {
       setRecentHistory(messages.filter((m) => m.role === "user").map((m) => ({ role: m.role, content: m.content })));
-      localStorage.setItem(sessionStartKey, Date.now().toString());
+      safeSet(sessionStartKey, Date.now().toString());
     } else {
       setRecentHistory([]);
     }
@@ -333,13 +337,13 @@ export function useStudentPage() {
     } else if (mode === "final") {
       if (passed) {
         if (selectedTopic) {
-          localStorage.setItem(`topic_mastered_${username}_${selectedTopic.id}`, "1");
+          safeSet(`topic_mastered_${username}_${selectedTopic.id}`, "1");
           setMasteredTopics((prev) => new Set([...prev, selectedTopic.id]));
         }
         const nextTopicId = selectedTopic ? selectedTopic.id + 1 : null;
         if (nextTopicId && nextTopicId <= 10) {
           const nextTopicLevel: TopicLevel = score === total ? "intermediate" : "beginner";
-          localStorage.setItem(`topic_level_${username}_${nextTopicId}`, nextTopicLevel);
+          safeSet(`topic_level_${username}_${nextTopicId}`, nextTopicLevel);
           openPreTest(nextTopicId, TOPICS[nextTopicId - 1]);
         } else {
           toast.success("Tüm konuları tamamladın! 🎉");

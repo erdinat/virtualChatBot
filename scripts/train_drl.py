@@ -19,7 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from modules.drl.agent import DQNAgent
 from modules.drl.environment import LearningEnvironment
+from modules.seed import set_seed
 from config.settings import DRLConfig
+
+# Reproducibility — seed'i değiştirmek istersen burada tek noktadan ayarla.
+SEED = 42
 
 
 def train(num_episodes: int = 500, verbose: bool = False) -> DQNAgent:
@@ -92,9 +96,12 @@ def train(num_episodes: int = 500, verbose: bool = False) -> DQNAgent:
 def main():
     parser = argparse.ArgumentParser(description="DRL Agent Eğitimi")
     parser.add_argument("--episodes", type=int, default=500, help="Episode sayısı (varsayılan: 500)")
+    parser.add_argument("--seed", type=int, default=SEED, help=f"Random seed (varsayılan: {SEED})")
     parser.add_argument("--verbose", action="store_true", help="Her 50 episode'da ilerleme yazdır")
     args = parser.parse_args()
 
+    set_seed(args.seed)
+    print(f"🎲 Seed sabitlendi: {args.seed} (reproducible)")
     agent = train(num_episodes=args.episodes, verbose=args.verbose)
 
     # Modeli kaydet

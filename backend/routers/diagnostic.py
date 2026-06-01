@@ -12,7 +12,10 @@ from fastapi import APIRouter, Depends
 from backend.auth import get_current_user
 from backend.schemas import DiagnosticSubmitRequest, TopicLevelRequest
 from modules.storage import load_student_data, save_student_data
-from config.quiz_questions import get_diagnostic_questions, get_questions_for_topic
+from config.quiz_questions import (
+    get_diagnostic_questions,
+    get_pretest_questions,
+)
 from config.settings import CURRICULUM
 
 logger = logging.getLogger(__name__)
@@ -86,37 +89,102 @@ def submit_diagnostic(payload: DiagnosticSubmitRequest, user: dict = Depends(get
     }
 
 
+# Bir zorluk dilimini "geçti" sayma eşiği: o dilimdeki soruların ≥%60'ı doğru.
+# 4 beginner için en az 3, 3 intermediate/advanced için en az 2 doğru gerekir.
+_TIER_PASS_RATIO = 0.6
+
+
+@router.get("/pretest/{topic_id}")
+def get_pretest(topic_id: int, _user: dict = Depends(get_current_user)):
+    """
+    Ön test için 10 soruyu kademeli zorluk sırasıyla döner (4 kolay + 3 orta + 3 zor).
+    Cevaplar istemciye gönderilmez; değerlendirme /topic-level üzerinden yapılır.
+    """
+    questions = get_pretest_questions(topic_id)
+    safe = [
+        {
+            "topic_id": topic_id,
+            "text": q["text"],
+            "options": q["options"],
+            "difficulty": q.get("difficulty", "beginner"),
+        }
+        for q in questions
+    ]
+    return {"questions": safe}
+
+
 @router.post("/topic-level")
 def assess_topic_level(payload: TopicLevelRequest, _user: dict = Depends(get_current_user)):
     """
     Konu bazlı ön test cevaplarını değerlendirir, seviye döner.
 
-    payload: {"topic_id": int, "answers": {"0": 2, "1": 0, "2": 3}}
+    Kademeli skorlama:
+      - Beginner dilimi geçilmediyse → 'beginner'
+      - Beginner geçildi ama intermediate geçilmediyse → 'beginner'
+        (temeli var ama orta seviyeye hazır değil)
+      - Beginner + intermediate geçildi, advanced geçilmediyse → 'intermediate'
+      - Üç dilim de geçildi → 'advanced'
+
+    Bir dilim "geçildi" = o dilimdeki soruların ≥%60'ı doğru.
+
+    payload: {"topic_id": int, "answers": {"0": 2, "1": 0, ...}}
              (soru_idx (str) → seçilen option indeksi (int))
 
-    Returns: {"score": int, "total": int, "level": "beginner"|"intermediate"|"advanced"}
+    Returns: {
+      "score": int, "total": int, "level": str,
+      "tier_breakdown": {"beginner": [correct, total], ...}
+    }
     """
     topic_id: int = payload.topic_id
     answers: dict = payload.answers
-    questions = get_questions_for_topic(topic_id)
+    # Ön test sıralamasıyla aynı: soru indeksleri kademeli zorluğa göre
+    questions = get_pretest_questions(topic_id)
     letters = ["A", "B", "C", "D"]
 
-    correct = sum(
-        1 for i, q in enumerate(questions)
-        if (opt := answers.get(str(i))) is not None
-        and 0 <= int(opt) < len(letters)
-        and letters[int(opt)] == q["answer"].upper()
-    )
-    total = len(questions)
+    def _is_correct(i: int, q: dict) -> bool:
+        opt = answers.get(str(i))
+        if opt is None:
+            return False
+        try:
+            idx = int(opt)
+        except (TypeError, ValueError):
+            return False
+        return 0 <= idx < len(letters) and letters[idx] == q["answer"].upper()
 
-    # 3 soruluk test için: 3/3 → advanced, 2/3 → intermediate, 0-1/3 → beginner
-    # Genel kural: tam puan → advanced, ≥ ⌈total*2/3⌉ → intermediate, geri kalan → beginner
-    intermediate_threshold = (total * 2 + 2) // 3  # ⌈total * 2/3⌉ (tamsayı yukarı yuvarlama)
-    if correct == total:
+    # Her zorluk dilimi için correct/total ayrı topla
+    tier_score: dict[str, list[int]] = {
+        "beginner":     [0, 0],
+        "intermediate": [0, 0],
+        "advanced":     [0, 0],
+    }
+    for i, q in enumerate(questions):
+        diff = q.get("difficulty", "beginner")
+        if diff not in tier_score:
+            diff = "beginner"
+        tier_score[diff][1] += 1
+        if _is_correct(i, q):
+            tier_score[diff][0] += 1
+
+    def _passed(tier: str) -> bool:
+        correct, total = tier_score[tier]
+        if total == 0:
+            # O seviyede soru yoksa geçilmiş say (geriye uyumluluk)
+            return True
+        return (correct / total) >= _TIER_PASS_RATIO
+
+    if _passed("beginner") and _passed("intermediate") and _passed("advanced"):
         level = "advanced"
-    elif correct >= intermediate_threshold:
+    elif _passed("beginner") and _passed("intermediate"):
         level = "intermediate"
     else:
         level = "beginner"
 
-    return {"score": correct, "total": total, "level": level}
+    total_correct = sum(s[0] for s in tier_score.values())
+    total_count = sum(s[1] for s in tier_score.values())
+
+    return {
+        "score": total_correct,
+        "total": total_count,
+        "level": level,
+        "tier_breakdown": {k: {"correct": v[0], "total": v[1]} for k, v in tier_score.items()},
+    }

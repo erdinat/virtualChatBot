@@ -3,7 +3,8 @@
 import json
 import logging
 import asyncio
-from typing import Any, AsyncGenerator
+from collections import OrderedDict
+from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +20,45 @@ from config.settings import CURRICULUM
 
 router = APIRouter()
 
+# Bellek sızıntısını önlemek için sınırlı LRU. Uzun süre çalışan sunucularda
+# kullanıcı/konu çiftleri sınırsız büyümesin diye eviction uygulanır.
+_SOCRATIC_MAX = 200
+_CHAIN_MAX = 100
+
+
+class _LRU(OrderedDict):
+    """En eski kullanılmayan girdiyi atan basit LRU cache."""
+
+    def __init__(self, maxsize: int):
+        super().__init__()
+        self._maxsize = maxsize
+
+    def get_and_touch(self, key):
+        if key in self:
+            self.move_to_end(key)
+            return self[key]
+        return None
+
+    def put(self, key, value) -> None:
+        if key in self:
+            self.move_to_end(key)
+        self[key] = value
+        while len(self) > self._maxsize:
+            evicted_key, _ = self.popitem(last=False)
+            logger.debug("LRU eviction: %s", evicted_key)
+
+
 # Sokratik yöneticiler — kullanıcı başına (process-wide, session-isolated değil)
-_socratic_managers: dict[str, SocraticManager] = {}
+_socratic_managers: _LRU = _LRU(_SOCRATIC_MAX)
 
 # Vector store — paylaşılan, kullanıcı verisi içermez
 # pdfs.py bu dict'i doğrudan import eder; yapı korunmalı
 _rag_chain_cache: dict = {"vector_store": None}
 
-# RAG zincirleri — (username, topic_id) başına ayrı bellek
-# Böylece farklı kullanıcıların konuşma geçmişleri birbirine karışmaz
-_chain_cache: dict[tuple[str, int | None], Any] = {}
+# RAG zincirleri — (username, topic_id) başına ayrı bellek (LRU bounded).
+# Böylece farklı kullanıcıların konuşma geçmişleri birbirine karışmaz ve
+# eski kullanılmayan zincirler bellekten düşer.
+_chain_cache: _LRU = _LRU(_CHAIN_MAX)
 
 
 def invalidate_chains() -> None:
@@ -97,8 +127,9 @@ def _get_rag_chain(username: str, topic_id: int | None = None):
     farklı kullanıcıların geçmişleri birbirine karışmaz.
     """
     key = (username, topic_id)
-    if key in _chain_cache:
-        return _chain_cache[key]
+    cached = _chain_cache.get_and_touch(key)
+    if cached is not None:
+        return cached
 
     # Vector store'u yükle (henüz yüklenmemişse)
     vs = _rag_chain_cache.get("vector_store")
@@ -118,7 +149,7 @@ def _get_rag_chain(username: str, topic_id: int | None = None):
     try:
         from modules.rag.chain import build_rag_chain
         chain = build_rag_chain(vector_store=vs, topic_id=topic_id)
-        _chain_cache[key] = chain
+        _chain_cache.put(key, chain)
         return chain
     except Exception as e:
         logger.error("RAG chain oluşturulamadı (user=%s, topic=%s): %s", username, topic_id, e)
@@ -150,17 +181,19 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
     simplify = _is_simplify(question)
     topic_id = req.topic_id or _detect_topic(question)
 
-    append_chat_log(username, "user", question, topic_id=topic_id)
+    # I/O event loop'u bloke etmesin diye worker thread'e devret
+    await asyncio.to_thread(append_chat_log, username, "user", question, topic_id)
 
-    # Sokratik manager
-    if username not in _socratic_managers:
-        _socratic_managers[username] = SocraticManager()
-    socratic = _socratic_managers[username]
+    # Sokratik manager (LRU bounded)
+    socratic = _socratic_managers.get_and_touch(username)
+    if socratic is None:
+        socratic = SocraticManager()
+        _socratic_managers.put(username, socratic)
 
     # Anladım kontrolü
     if _is_understood(question):
         response = "Harika! Anladığın için sevindim 😊 Başka sorun var mı?"
-        append_chat_log(username, "assistant", response, topic_id=topic_id)
+        await asyncio.to_thread(append_chat_log, username, "assistant", response, topic_id)
 
         async def stream_understood():
             async for chunk in _stream_response(response):
@@ -197,7 +230,7 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
         if req.topic_level and req.topic_level in _LEVEL_PROMPT:
             level_ctx = _LEVEL_PROMPT[req.topic_level]
         else:
-            data = load_student_data(username)
+            data = await asyncio.to_thread(load_student_data, username)
             total = len(data["interaction_history"])
             studied = {k: v for k, v in data["student_mastery"].items() if v > 0}
             avg = sum(studied.values()) / len(studied) if studied else 0.0
@@ -229,12 +262,16 @@ async def ask(req: ChatRequest, user: dict = Depends(get_current_user)):
             chain = _get_rag_chain(username, topic_id)
             if chain:
                 from modules.rag import ask as rag_ask
-                result = rag_ask(chain, rag_query, socratic_suffix=suffix, chat_history=lc_history)
+                # rag_ask sync LLM HTTP çağrısı — thread'e devret, event loop boşta kalsın
+                result = await asyncio.to_thread(
+                    rag_ask, chain, rag_query,
+                    socratic_suffix=suffix, chat_history=lc_history,
+                )
                 response_text = result["answer"]
             else:
                 response_text = "📚 Henüz ders notu yüklenmedi. Lütfen öğretmeninize bildirin."
 
-            append_chat_log(username, "assistant", response_text, topic_id=topic_id)
+            await asyncio.to_thread(append_chat_log, username, "assistant", response_text, topic_id)
 
             # Kelime kelime stream
             words = response_text.split(" ")

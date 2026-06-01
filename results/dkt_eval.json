@@ -1,0 +1,10 @@
+{
+  "model_path": "/Users/erdinatalihan/virtual_teaching_assistant/models/dkt_model.pt",
+  "test_students": 300,
+  "metrics": {
+    "auc_roc": 0.6711,
+    "binary_cross_entropy": 0.6004,
+    "mae": 0.219,
+    "rmse": 0.2676
+  }
+}

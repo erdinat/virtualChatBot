@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
@@ -9,6 +9,7 @@ import TeacherPage from "./pages/TeacherPage";
 import DiagnosticPage from "./pages/DiagnosticPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import SplashScreen from "./components/SplashScreen";
+import { safeGet } from "./utils/safeStorage";
 
 const qc = new QueryClient();
 
@@ -26,15 +27,17 @@ function RootRedirect() {
   // Students go to diagnostic first if not done (checked via localStorage flag)
   const diagKey = `diagnostic_done_${username}`;
   const onboardingKey = `onboarding_done_${username}`;
-  if (!localStorage.getItem(diagKey)) return <Navigate to="/diagnostic" replace />;
-  if (!localStorage.getItem(onboardingKey)) return <Navigate to="/onboarding" replace />;
+  if (!safeGet(diagKey)) return <Navigate to="/diagnostic" replace />;
+  if (!safeGet(onboardingKey)) return <Navigate to="/onboarding" replace />;
   return <Navigate to="/student" replace />;
 }
 
 export default function App() {
   const [splashDone, setSplashDone] = useState(false);
 
-  const handleSplashComplete = () => setSplashDone(true);
+  // useCallback: her render'da yeni fonksiyon referansı oluşmasın
+  // Aksi halde SplashScreen'in useEffect'i her render'da yeniden çalışır → timer döngüsü
+  const handleSplashComplete = useCallback(() => setSplashDone(true), []);
 
   return (
     <QueryClientProvider client={qc}>

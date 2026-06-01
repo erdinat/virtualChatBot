@@ -19,7 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import CURRICULUM, DKTConfig
 from modules.dkt.model import DKTModel
 from modules.dkt.train import train_dkt, save_model
+from modules.seed import set_seed
 from scripts.generate_synthetic_data import generate_dataset
+
+# Reproducibility — seed'i değiştirmek istersen burada tek noktadan ayarla.
+SEED = 42
+set_seed(SEED)
 
 NUM_SKILLS = len(CURRICULUM)
 
@@ -34,6 +39,7 @@ EPOCHS             = 60     # Eğitim turu sayısı
 def main():
     print("=" * 55)
     print("  DKT (Deep Knowledge Tracing) Model Eğitimi")
+    print(f"  (seed={SEED} — reproducible)")
     print("=" * 55)
 
     # 1. Sentetik veri üret

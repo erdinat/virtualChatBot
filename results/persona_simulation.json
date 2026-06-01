@@ -1,0 +1,48 @@
+[
+  {
+    "persona": "Ali (Başlangıç)",
+    "description": "Python'a yeni başlayan öğrenci",
+    "initial_avg_mastery": 0.1,
+    "final_avg_mastery": 0.09,
+    "mastery_gain": -0.01,
+    "steps_taken": 50,
+    "final_mastery": {
+      "Değişkenler ve Veri Tipleri": 0.1,
+      "Operatörler ve İfadeler": 0.1,
+      "Koşul İfadeleri (if/elif/else)": 0.1,
+      "Döngüler (for/while)": 0.1,
+      "Listeler ve Tuple'lar": 0.1,
+      "Sözlükler ve Kümeler": 0.1,
+      "Fonksiyonlar": 0.1,
+      "Dosya İşlemleri": 0.1,
+      "Hata Yönetimi (try/except)": 0.0,
+      "Nesne Yönelimli Programlama (OOP)": 0.1
+    },
+    "topic_visit_counts": {
+      "Hata Yönetimi (try/except)": 50
+    }
+  },
+  {
+    "persona": "Ayşe (İleri)",
+    "description": "Temel konularda güçlü, ileri konularda zayıf öğrenci",
+    "initial_avg_mastery": 0.49,
+    "final_avg_mastery": 0.525,
+    "mastery_gain": 0.035,
+    "steps_taken": 50,
+    "final_mastery": {
+      "Değişkenler ve Veri Tipleri": 0.85,
+      "Operatörler ve İfadeler": 0.8,
+      "Koşul İfadeleri (if/elif/else)": 0.75,
+      "Döngüler (for/while)": 0.7,
+      "Listeler ve Tuple'lar": 1.0,
+      "Sözlükler ve Kümeler": 0.6,
+      "Fonksiyonlar": 0.2,
+      "Dosya İşlemleri": 0.15,
+      "Hata Yönetimi (try/except)": 0.1,
+      "Nesne Yönelimli Programlama (OOP)": 0.1
+    },
+    "topic_visit_counts": {
+      "Listeler ve Tuple'lar": 50
+    }
+  }
+]

@@ -65,6 +65,33 @@ export default function PreTestModal({ preTest, onClose, onAnswer, onNext, onSub
                       {preTest.result.level === "intermediate" && "Temel bilgilerini biliyorsun; orta-ileri konulara odaklanacağız."}
                       {preTest.result.level === "advanced" && "Yetkin seviyedesin! Zorlu örnekler ve Pythonic kalıplarla devam edeceğiz."}
                     </p>
+
+                    {/* Kademe bazlı detay — neden bu seviye olduğunu öğrenci görebilsin */}
+                    {preTest.result.tier_breakdown && (
+                      <div className="mt-5 grid grid-cols-3 gap-2 max-w-xs mx-auto">
+                        {(["beginner", "intermediate", "advanced"] as const).map((tier) => {
+                          const t = preTest.result!.tier_breakdown![tier];
+                          if (!t || t.total === 0) return null;
+                          const passed = (t.correct / t.total) >= 0.6;
+                          return (
+                            <div key={tier} className="rounded-lg p-2 text-center"
+                              style={{
+                                background: passed ? "rgba(52,211,153,.08)" : "rgba(255,255,255,.04)",
+                                border: `1px solid ${passed ? "rgba(52,211,153,.3)" : "rgba(255,255,255,.08)"}`,
+                              }}>
+                              <p className="text-[10px] uppercase tracking-wider mb-1"
+                                style={{ color: passed ? "#34d399" : "rgba(255,255,255,.5)" }}>
+                                {LEVEL_META[tier].label}
+                              </p>
+                              <p className="text-sm font-bold"
+                                style={{ color: passed ? "#34d399" : "rgba(255,255,255,.65)" }}>
+                                {t.correct}/{t.total}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => onStartChat(preTest.topicId, preTest.topicName, preTest.result!.level)}
@@ -78,7 +105,7 @@ export default function PreTestModal({ preTest, onClose, onAnswer, onNext, onSub
               ) : (
                 /* Soru ekranı */
                 <>
-                  <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-xs uppercase font-bold tracking-widest text-on-surface-variant mb-1">Ön Test</p>
                       <h2 className="text-base font-bold text-on-surface">{preTest.topicName}</h2>
@@ -88,6 +115,20 @@ export default function PreTestModal({ preTest, onClose, onAnswer, onNext, onSub
                       {preTest.step + 1} / {preTest.questions.length}
                     </span>
                   </div>
+
+                  {/* Zorluk rozeti — öğrenciye sorunun hangi kademede olduğunu gösterir */}
+                  {preTest.questions[preTest.step].difficulty && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-wider text-on-surface-variant">Zorluk:</span>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold"
+                        style={{
+                          background: LEVEL_META[preTest.questions[preTest.step].difficulty!].bg,
+                          color: LEVEL_META[preTest.questions[preTest.step].difficulty!].color,
+                        }}>
+                        {LEVEL_META[preTest.questions[preTest.step].difficulty!].label}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="h-1 w-full rounded-full mb-6" style={{ background: "rgba(151,169,255,.12)" }}>
                     <div className="h-full rounded-full gradient-bg transition-all duration-300"

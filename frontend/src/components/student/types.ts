@@ -10,10 +10,15 @@ export interface Message {
 export interface PreTestState {
   topicId: number;
   topicName: string;
-  questions: { topic_id: number; text: string; options: string[] }[];
+  questions: { topic_id: number; text: string; options: string[]; difficulty?: TopicLevel }[];
   answers: Record<number, number>;
   step: number;
-  result: { score: number; total: number; level: TopicLevel } | null;
+  result: {
+    score: number;
+    total: number;
+    level: TopicLevel;
+    tier_breakdown?: Record<TopicLevel, { correct: number; total: number }>;
+  } | null;
 }
 
 export interface QuizModalState {

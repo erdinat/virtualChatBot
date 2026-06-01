@@ -1,0 +1,23 @@
+{
+  "config": {
+    "students": 200,
+    "steps": 300
+  },
+  "results": {
+    "Sıralı (Adaptasyonsuz)": {
+      "avg_final_mastery": 0.3165,
+      "avg_steps_to_mastery": -1,
+      "mastery_rate": 0.0
+    },
+    "Kural Tabanlı": {
+      "avg_final_mastery": 0.2783,
+      "avg_steps_to_mastery": -1,
+      "mastery_rate": 0.0
+    },
+    "DRL (Eğitilmiş)": {
+      "avg_final_mastery": 0.3122,
+      "avg_steps_to_mastery": -1,
+      "mastery_rate": 0.0
+    }
+  }
+}

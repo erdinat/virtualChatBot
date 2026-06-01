@@ -9,6 +9,7 @@ Multi-process senaryosu (çoklu uvicorn worker) için Redis/DB gerekir.
 """
 
 import json
+import re
 import threading
 from collections import deque
 from datetime import datetime, timezone
@@ -16,6 +17,15 @@ from pathlib import Path
 from typing import Dict, List
 
 from config.settings import BASE_DIR
+
+# Username path traversal'a karşı whitelist: harf, rakam, alt çizgi, tire (3-32 karakter)
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
+
+
+def _validate_username(username: str) -> str:
+    if not isinstance(username, str) or not _USERNAME_RE.match(username):
+        raise ValueError(f"Geçersiz kullanıcı adı: {username!r}")
+    return username
 
 STUDENT_LOGS_DIR = BASE_DIR / "data" / "student_logs"
 SYSTEM_LOGS_DIR  = BASE_DIR / "data" / "system_logs"
@@ -46,7 +56,8 @@ def _now_iso() -> str:
 # ── Öğrenci Verisi ──────────────────────────────────────────────────────────
 
 def _student_path(username: str) -> Path:
-    return STUDENT_LOGS_DIR / f"{username}.json"
+    safe = _validate_username(username)
+    return STUDENT_LOGS_DIR / f"{safe}.json"
 
 
 def load_student_data(username: str) -> dict:

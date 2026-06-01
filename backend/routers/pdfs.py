@@ -3,7 +3,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 
-from backend.auth import require_teacher
+from backend.auth import get_current_user, require_teacher
 from backend.schemas import UploadResponse
 from backend.routers.chat import _rag_chain_cache, invalidate_chains
 
@@ -11,6 +11,15 @@ router = APIRouter()
 
 RAW_PDFS_PATH = Path("data/raw_pdfs")
 MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
+
+# PDF magic bytes: %PDF (her geçerli PDF böyle başlar — RFC 8118 §4)
+# Sadece uzantı kontrolü polyglot dosyaları yakalayamaz; içerik imzası gerekir.
+_PDF_MAGIC = b"%PDF-"
+
+
+def _is_pdf_content(content: bytes) -> bool:
+    """İlk 5 bayt PDF magic imzasıyla eşleşiyor mu?"""
+    return len(content) >= len(_PDF_MAGIC) and content[: len(_PDF_MAGIC)] == _PDF_MAGIC
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -41,6 +50,12 @@ async def upload_pdfs(
             raise HTTPException(
                 status_code=400,
                 detail=f"{safe_name} dosyası 10 MB limitini aşıyor ({len(content)//1024//1024} MB)"
+            )
+        # Magic byte kontrolü — uzantı manipülasyonuna karşı içerik doğrulaması
+        if not _is_pdf_content(content):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{safe_name} geçerli bir PDF dosyası değil (imza eşleşmiyor)"
             )
         dest.write_bytes(content)
         saved.append(dest)
@@ -83,6 +98,8 @@ async def upload_pdfs(
 
 
 @router.get("/status")
-def pdf_status():
-    """RAG zincirinin yüklenip yüklenmediğini döner."""
+def pdf_status(_user: dict = Depends(get_current_user)):
+    """RAG zincirinin yüklenip yüklenmediğini döner.
+    Auth zorunlu — bilgi sızıntısını minimize eder, desen tutarlılığı sağlar.
+    """
     return {"loaded": _rag_chain_cache.get("vector_store") is not None}

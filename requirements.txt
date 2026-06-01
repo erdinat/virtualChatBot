@@ -1,34 +1,36 @@
 # ===== Sanal Öğretmen Asistanı - Bağımlılıklar =====
+# Sürümler reproducibility için sabitlenmiştir.
+# Güncellemek için: pip install -U <paket> && pip freeze | grep <paket>
 
 # --- LLM & Orkestrasyon ---
-langchain>=0.3.0
-langchain-classic>=1.0.0
-langchain-community>=0.3.0
-langchain-openai>=0.2.0
-openai>=1.50.0
+langchain==1.2.10
+langchain-classic==1.0.2
+langchain-community==0.4.1
+langchain-openai==1.1.11
+openai==2.26.0
 
 # --- RAG Pipeline ---
-chromadb>=0.5.0
-sentence-transformers>=3.0.0
-pypdf>=4.0.0
+chromadb==1.5.5
+sentence-transformers==5.2.3
+pypdf==6.8.0
 
 # --- FastAPI Backend ---
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-python-multipart>=0.0.12
-python-jose[cryptography]>=3.3.0
-bcrypt>=4.2.0
+fastapi==0.135.2
+uvicorn[standard]==0.41.0
+python-multipart==0.0.22
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
 
 # --- Derin Öğrenme (DKT & DRL) ---
-torch>=2.2.0
-numpy>=1.26.0
-scikit-learn>=1.5.0
+torch==2.10.0
+numpy==2.4.3
+scikit-learn==1.8.0
 
 # --- Veri & Ortam ---
-python-dotenv>=1.0.0
-pyyaml>=6.0.0
-pydantic>=2.0.0
+python-dotenv==1.2.2
+pyyaml==6.0.3
+pydantic==2.12.5
 
 # --- Geliştirme Araçları ---
-pytest>=8.0.0
-httpx>=0.27.0
+pytest==9.0.2
+httpx==0.28.1

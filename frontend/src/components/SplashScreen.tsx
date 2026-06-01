@@ -35,13 +35,25 @@ export default function SplashScreen({ onComplete }: Props) {
     setTimeout(onComplete, 700);
   };
 
+  // Video bittiğinde de geç
+  const handleVideoEnded = () => dismiss();
+
   useEffect(() => {
     const t1 = setTimeout(() => setShowText(true), 2200);
-    const t2 = setTimeout(dismiss, DURATION);
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); dismiss(); } };
+    const t2 = setTimeout(() => {
+      setVisible(false);
+      setTimeout(onComplete, 700);
+    }, DURATION);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        setVisible(false);
+        setTimeout(onComplete, 700);
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => { clearTimeout(t1); clearTimeout(t2); window.removeEventListener("keydown", onKey); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onComplete]);
 
   return (
     <AnimatePresence>
@@ -59,7 +71,7 @@ export default function SplashScreen({ onComplete }: Props) {
             muted
             playsInline
             tabIndex={-1}
-            onEnded={dismiss}
+            onEnded={handleVideoEnded}
             style={{
               position: "absolute", inset: 0,
               width: "100%", height: "100%",

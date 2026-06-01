@@ -9,7 +9,6 @@ from typing import Optional
 
 from langchain_openai import ChatOpenAI
 from langchain_classic.chains import ConversationalRetrievalChain
-from langchain_classic.memory import ConversationBufferWindowMemory
 from langchain_core.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
@@ -117,8 +116,10 @@ def build_rag_chain(
     topic_id: int | None = None,
 ):
     """
-    RAG zincirini oluşturur: Retriever + LLM + Konuşma Belleği.
-    Sokratik yönlendirme system prompt'a gömülüdür.
+    RAG zincirini oluşturur: Retriever + LLM.
+    Bellek (memory) kasıtlı olarak KALDIRILDI — her istekte sohbet geçmişi
+    doğrudan chain.invoke({"chat_history": [...]}) ile iletilir.
+    Bu yaklaşım sunucu yeniden başladığında geçmişin kaybolması sorununu ortadan kaldırır.
     """
     if llm is None:
         llm = get_llm()
@@ -132,26 +133,16 @@ def build_rag_chain(
 
     retriever = get_retriever(vector_store, topic_id=topic_id)
 
-    # Konuşma belleği – son 4 mesajı hatırlar (2 exchange)
-    # k=10 → k=4: kirli geçmişin retrieval'ı zehirlemesini önler
-    memory = ConversationBufferWindowMemory(
-        memory_key="chat_history",
-        return_messages=True,
-        output_key="answer",
-        k=4,
-    )
-
     # Prompt şablonu
     prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template(SYSTEM_PROMPT),
         HumanMessagePromptTemplate.from_template("{question}"),
     ])
 
-    # Konuşmalı RAG zinciri
+    # Belleксиз konuşmalı RAG zinciri — chat_history her invoke'ta geçilir
     chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=retriever,
-        memory=memory,
         return_source_documents=True,
         combine_docs_chain_kwargs={"prompt": prompt},
         condense_question_prompt=ChatPromptTemplate.from_template(CONDENSE_QUESTION_PROMPT),
@@ -161,27 +152,25 @@ def build_rag_chain(
     return chain
 
 
-def ask(chain, question: str, socratic_suffix: str = "") -> dict:
+def ask(
+    chain,
+    question: str,
+    socratic_suffix: str = "",
+    chat_history: list | None = None,
+) -> dict:
     """
     RAG zincirine soru sorar ve cevap + kaynakları döndürür.
 
-    Args:
-        chain: Oluşturulmuş RAG zinciri
-        question: Öğrencinin sorusu
-        socratic_suffix: SocraticManager'dan gelen pedagojik yönerge (opsiyonel)
-
-    Returns:
-        {
-            "answer": str,
-            "sources": List[Document],
-        }
+    chat_history: [(human_text, ai_text), ...] formatında önceki mesajlar.
+    Frontend'den gelen geçmiş buraya iletilir; sunucu belleğine bağımlılık yoktur.
     """
     if socratic_suffix:
         augmented = f"{question}\n\n[Pedagojik Rehberlik]: {socratic_suffix.strip()}"
     else:
         augmented = question
 
-    result = chain.invoke({"question": augmented})
+    payload: dict = {"question": augmented, "chat_history": chat_history or []}
+    result = chain.invoke(payload)
     return {
         "answer": result.get("answer", ""),
         "sources": result.get("source_documents", []),

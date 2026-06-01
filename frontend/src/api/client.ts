@@ -107,6 +107,10 @@ export const getCurriculum = () => api.get("/api/teacher/curriculum").then((r) =
 export const getQuiz = (topic_id: number) =>
   api.get(`/api/chat/quiz/${topic_id}`).then((r) => r.data);
 
+/** Ön test için 10 sorulu kademeli zorluk listesi (4 kolay + 3 orta + 3 zor). */
+export const getPretest = (topic_id: number) =>
+  api.get(`/api/diagnostic/pretest/${topic_id}`).then((r) => r.data);
+
 /** LLM ile seviye + sohbet bağlamına özel 3 soru üretir. Döner: {questions, correct: number[]} */
 export const generateQuiz = (
   topic_id: number,
